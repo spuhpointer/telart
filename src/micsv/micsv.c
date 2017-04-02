@@ -90,7 +90,6 @@ void MIC (TPSVCINFO *p_svc)
 			goto out;
 		}
 		
-#if 0
 		if (SUCCEED!=tpsend(p_svc->cd, (char *)p_ub, 0, TPNOBLOCK, &revent))
 		{
 			TP_LOG(log_error, "tpsend failed: %s", tpstrerror(tperrno));
@@ -113,7 +112,6 @@ void MIC (TPSVCINFO *p_svc)
 			ret=FAIL;
 			goto out;
 		}
-#endif
 		
 		TP_LOG(log_info, "Packet delivered ok");
         }
