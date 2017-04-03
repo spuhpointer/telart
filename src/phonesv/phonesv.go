@@ -12,9 +12,29 @@ const (
 	SUCCEED     = atmi.SUCCEED
 	FAIL        = atmi.FAIL
 	PROGSECTION = "phonesv"
+
+	CALL_MODE_NONE    = 0
+	CALL_MODE_ACTIVE  = 1
+	CALL_MODE_APSSIVE = 2
+
+	/*
+	 * Active stages:
+	 */
+	CALL_STAGE_NONE   = 0 /* no call in progress */
+	CALL_STAGE_SEARCH = 1 /* search for free phone */
+	CALL_STAGE_RING   = 2 /* righ their bell our, play: ---.--- */
+	CALL_STAGE_BUSY   = 3 /* no phone found, play: -.-.- */
+	CALL_IN_CALL      = 4 /* call established active/passive */
+	CALL_THEIR_HUP    = 5 /* active/passive, other end hup */
 )
 
-var MInCall bool = true
+var MInCall bool = false
+var MCallMode int = CALL_MODE_NONE
+var MStage = CALL_STAGE_NONE
+
+/* TODO: */
+var MMinNode = 1  /* search in random from... */
+var MMaxNode = 20 /* search in random to... */
 
 //Redirec the voice from MIC to PHONE
 //@param
@@ -35,18 +55,10 @@ func GoVoice(fromMic int, toPhone int) {
 		os.Exit(atmi.FAIL)
 	}
 
-	//Allocate xatmi context
-	if errA := ac.TpInit(); errA != nil {
-		fmt.Fprintf(os.Stderr, "Failed to tpinit %s",
-			errA.Message())
-		return
-	}
-
 	//Return to the caller
 	defer func() {
 
 		ac.TpLogError("Voice terminates with  %d", ret)
-		ac.TpTerm()
 	}()
 
 	//Allocate configuration buffer
@@ -120,26 +132,32 @@ func PHONE(ac *atmi.ATMICtx, svc *atmi.TPSVCINFO) {
 	//fmt.Println("Incoming request:")
 	ub.TpLogPrintUBF(atmi.LOG_DEBUG, "Incoming request:")
 
-	/*
-		//Resize buffer, to have some more space
-		if err := ub.TpRealloc(1024); err != nil {
-			ac.TpLogError("TpRealloc() Got error: %d:[%s]\n", err.Code(), err.Message())
-			ret = FAIL
-			return
-		}
+	//Add test field to buffer
+	hup, errB := ub.BGetInt(u.A_HUP, 0)
 
-		//Add test field to buffer
-		if err := ub.BChg(u.T_STRING_2_FLD, 0, "Hello World from XATMI server"); err != nil {
-			ac.TpLogError("BChg() Got error: %d:[%s]\n", err.Code(), err.Message())
-			ret = FAIL
-			return
-		}
+	if nil != errB {
+		ac.TpLogError("BGetInt() Got error: %s", errB.Error())
+		ret = FAIL
+		return
+	}
 
-		//TODO: Run your processing here, and keep the succeed or fail status in
-		//in "ret" flag.
-	*/
+	switch hup {
 
-	go GoVoice(19, 19)
+	case 0:
+		ac.TpLogInfo("Terminating call...")
+		MInCall = false
+		break
+
+	case 1:
+		ac.TpLogInfo("Starting call...")
+		MInCall = true
+		go GoVoice(19, 19)
+		break
+
+	default:
+		ac.TpLogError("Invalid command: %d", hup)
+
+	}
 
 	return
 }
@@ -213,6 +231,9 @@ func Init(ac *atmi.ATMICtx) int {
 //@param ac ATMI Context
 func Uninit(ac *atmi.ATMICtx) {
 	ac.TpLogWarn("Server is shutting down...")
+	MInCall = false
+	MCallMode = CALL_MODE_NONE
+	MStage = CALL_STAGE_NONE
 }
 
 //Executable main entry point

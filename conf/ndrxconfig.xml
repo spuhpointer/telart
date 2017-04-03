@@ -106,14 +106,14 @@
 			<appopt>-f -n13 -r -i 0.0.0.0 -p 21003 -tA -z30</appopt>
 		</server>
 		<server name="micsv">
-		        <ping_max>90</ping_max>
+		        <ping_max>90000</ping_max>
 			<min>1</min>
 			<max>1</max>
 			<srvid>2000</srvid>
 			<sysopt>-e ${NDRX_APPHOME}/log/micsv.log -r</sysopt>
 		</server>
 		<server name="liveplaysv">
-		        <ping_max>90</ping_max>
+		        <ping_max>900000</ping_max>
 			<min>1</min>
 			<max>1</max>
 			<srvid>2500</srvid>

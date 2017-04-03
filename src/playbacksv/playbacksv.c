@@ -25,7 +25,7 @@
 #endif
 
 
-#define PROGSECTION		"liveplaysv"	/* configuration section */
+#define PROGSECTION		"playbacksv"	/* configuration section */
 #define CONFIG_SERVER		"@CCONF"
 #define KEY_VAL_BUFFSZ		1024
 
@@ -47,7 +47,7 @@ static char M_command[PATH_MAX]={0};
  * Service entry
  * @return SUCCEED/FAIL
  */
-void LIVEPLAY (TPSVCINFO *p_svc)
+void PLAYBACK (TPSVCINFO *p_svc)
 {
 	int ret = SUCCEED;
 	FILE *fp=NULL;
@@ -299,10 +299,10 @@ int init(int argc, char** argv)
 	
 	
 	/* Advertise our service according to our cluster node id */
-	sprintf(svcnm, "LIVEPLAY%02ld", tpgetnodeid());
-	if (SUCCEED!=tpadvertise(svcnm, LIVEPLAY))
+	sprintf(svcnm, "PLAYBACK%02ld", tpgetnodeid());
+	if (SUCCEED!=tpadvertise(svcnm, PLAYBACK))
 	{
-		TP_LOG(log_error, "Failed to initialize LIVEPLAY!");
+		TP_LOG(log_error, "Failed to initialize PLAYBACK!");
 		ret=FAIL;
 		goto out;
 	}	
