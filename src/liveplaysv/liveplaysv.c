@@ -196,6 +196,7 @@ int init(int argc, char** argv)
 	
 	
 	TP_LOG(log_info, "Initializing...");
+        signal(SIGCHLD, SIG_IGN);
 
 	if (SUCCEED!=tpinit(NULL))
 	{

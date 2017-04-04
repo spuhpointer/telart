@@ -115,6 +115,9 @@ void PLAYBACK (TPSVCINFO *p_svc)
         /* Check the process name in output... */
         while (SUCCEED==ret)
         {
+                /* Receive command stop play, or timeout - terminat the child...
+                 * thus terminate the playback...
+                 */
 		if (SUCCEED!=tprecv(p_svc->cd, (char **)&p_ub, 0L, 0L, &revent))
 		{
 			TP_LOG(log_error, "tpsend failed: %s", tpstrerror(tperrno));
@@ -196,6 +199,8 @@ int init(int argc, char** argv)
 	
 	
 	TP_LOG(log_info, "Initializing...");
+
+        signal(SIGCHLD, SIG_IGN);
 
 	if (SUCCEED!=tpinit(NULL))
 	{

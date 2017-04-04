@@ -35,6 +35,20 @@ A_DATA                  100     carray - 1      Audio data buffer
 A_FILENAME              101     string - 1      File name to playback
 A_HUP                   102     short  - 1      hang up swith data
 
+# Commands unique across all target services:
+# 'H' - hup phone
+# 'P' - pick up phone
+# 'W' - geneate wait signal
+# 'w' - stop the wait signal
+# 'B' - Generate busy signal
+# 'b' - Stop the wait signal
+# 'E' - Establish phone connection
+# 'R' - Ring the bell
+# 'r' - STOP to ring the bell
+# 's' - STOP the conversation (from one node to another)
+# 'M' - MIC transmission start
+# 'm' - MIC STOP transmission
+A_CMD                   103     char   - 1      Host command
 
 
 $#endif

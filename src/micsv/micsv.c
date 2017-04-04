@@ -4,6 +4,10 @@
 #include <memory.h>
 #include <math.h>
 #include <errno.h>
+#include <signal.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <sys/resource.h>
 
 #include <ndebug.h>
 #include <atmi.h>
@@ -131,6 +135,27 @@ out:
 }
 
 /**
+ * Consume any sigchilds...
+ */
+static int periodic(void)
+{
+	int ret = SUCCEED;
+	
+	pid_t chldpid;
+	int stat_loc;
+	struct rusage rusage;
+
+	memset(&rusage, 0, sizeof(rusage));
+	
+	while (0<(chldpid = wait3(&stat_loc, WNOHANG|WUNTRACED, &rusage)))
+	{
+		NDRX_LOG(log_warn, "sigchld: PID: %d exit status: %d",
+					chldpid, stat_loc);
+	}	
+	
+	return ret;
+}
+/**
  * Initialize the application
  * @param argc	argument count
  * @param argv	argument values
@@ -153,6 +178,13 @@ int init(int argc, char** argv)
 	
 	
 	TP_LOG(log_info, "Initializing...");
+	
+	/* ignore sigchilds... as we will consume them by wait */
+	signal(SIGCHLD, SIG_IGN);
+	
+	/* tpext_addperiodcb(5, periodic); */
+	
+	/* Install periodic callback... */
 
 	if (SUCCEED!=tpinit(NULL))
 	{
@@ -253,7 +285,7 @@ int init(int argc, char** argv)
 		TP_LOG(log_error, "Failed to initialize MIC!");
 		ret=FAIL;
 		goto out;
-	}	
+	}
 	
 out:
 
