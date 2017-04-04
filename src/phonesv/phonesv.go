@@ -2,7 +2,10 @@ package main
 
 import (
 	"fmt"
+	t "include"
 	"os"
+	"sync"
+	"time"
 	u "ubftab"
 
 	atmi "github.com/endurox-dev/endurox-go"
@@ -13,28 +16,310 @@ const (
 	FAIL        = atmi.FAIL
 	PROGSECTION = "phonesv"
 
-	CALL_MODE_NONE    = 0
-	CALL_MODE_ACTIVE  = 1
-	CALL_MODE_APSSIVE = 2
-
 	/*
 	 * Active stages:
 	 */
-	CALL_STAGE_NONE   = 0 /* no call in progress */
-	CALL_STAGE_SEARCH = 1 /* search for free phone */
-	CALL_STAGE_RING   = 2 /* righ their bell our, play: ---.--- */
-	CALL_STAGE_BUSY   = 3 /* no phone found, play: -.-.- */
-	CALL_IN_CALL      = 4 /* call established active/passive */
-	CALL_THEIR_HUP    = 5 /* active/passive, other end hup */
+	SIdle      = "Idle"         /* Idle state */
+	SActivFind = "ActFind"      /* Find the target phone */
+	SAllBusy   = "ActivAllBusy" /* All phones are busy */
+	SActivRing = "ActRing"      /* Ring the target phone */
+	SActivConv = "ActConv"      /* Active conversation */
+	SPasivRing = "PasivRing"    /* We go the ring */
+	SPasivConv = "PasivConv"    /* We go into conversion */
 )
 
-var MInCall bool = false
-var MCallMode int = CALL_MODE_NONE
-var MStage = CALL_STAGE_NONE
+type TransitionFunc func(ac *atmi.ATMICtx) error
+
+type Transition struct {
+	cmd        rune           /* Command, see t.CMD_ */
+	f1         TransitionFunc /* transision func 1 */
+	f2         TransitionFunc /* transision func 2 */
+	f3         TransitionFunc /* transision func 3 */
+	next_state string         /* Next state */
+}
+
+type State struct {
+	state       string /* state, see S* */
+	voice       bool   /* run voice */
+	ring        bool   /* Ring the bell on taret system */
+	playBusy    bool   /* Play busy? */
+	playWait    bool   /* Play wait at state */
+	tout        int    /* timeout */
+	transitions []Transition
+}
+
+var Machine = []State{
+	/* Active states: we do the call: */
+	State{
+		state: SIdle, voice: false, ring: false, playBusy: false, playWait: false, tout: -1,
+		transitions: []Transition{
+			Transition{cmd: t.CMD_HUP_OUR, f1: nil, f2: nil, f3: nil, next_state: SIdle},
+			Transition{cmd: t.CMD_PICK_UP, f1: GoFindFreePhone, f2: nil, f3: nil, next_state: SActivFind},
+			/* They send us ring the bell - if idle, accept... */
+			Transition{cmd: t.CMD_RING_BELL, f1: nil, f2: nil, f3: nil, next_state: SPasivRing},
+		},
+	},
+	State{
+		state: SActivFind, voice: false, ring: false, playBusy: false, playWait: true, tout: 90,
+		transitions: []Transition{
+			Transition{cmd: t.CMD_TIMEOUT, f1: nil, f2: nil, f3: nil, next_state: SAllBusy},
+			Transition{cmd: t.CMD_FOUND, f1: nil, f2: nil, f3: nil, next_state: SActivRing},
+			Transition{cmd: t.CMD_RING_BELL, f1: SetAnswerBusy, f2: nil, f3: nil, next_state: SActivFind},
+		},
+	},
+	State{
+		state: SActivRing, voice: false, ring: false, playBusy: false, playWait: true, tout: 90,
+		transitions: []Transition{
+			Transition{cmd: t.CMD_TIMEOUT, f1: nil, f2: nil, f3: nil, next_state: SAllBusy},
+			/* they send us establish... */
+			Transition{cmd: t.CMD_ESTABLISH_CALL, f1: nil, f2: nil, f3: nil, next_state: SActivConv},
+			Transition{cmd: t.CMD_RING_BELL, f1: SetAnswerBusy, f2: nil, f3: nil, next_state: SActivRing},
+			Transition{cmd: t.CMD_HUP_OUR, f1: SendHUP, f2: nil, f3: nil, next_state: SAllBusy},
+		},
+	},
+	State{
+		state: SActivConv, voice: false, ring: false, playBusy: false, playWait: false, tout: 600,
+		transitions: []Transition{
+			Transition{cmd: t.CMD_TIMEOUT, f1: SendHUP, f2: nil, f3: nil, next_state: SAllBusy},
+			Transition{cmd: t.CMD_HUP_OUR, f1: SendHUP, f2: nil, f3: nil, next_state: SIdle},
+			Transition{cmd: t.CMD_HUP_THEIR, f1: nil, f2: nil, f3: nil, next_state: SAllBusy},
+			Transition{cmd: t.CMD_RING_BELL, f1: SetAnswerBusy, f2: nil, f3: nil, next_state: SActivConv},
+		},
+	},
+	State{
+		state: SAllBusy, voice: false, ring: false, playBusy: true, playWait: false, tout: -1,
+		transitions: []Transition{
+			Transition{cmd: t.CMD_HUP_OUR, f1: nil, f2: nil, f3: nil, next_state: SIdle},
+			Transition{cmd: t.CMD_RING_BELL, f1: SetAnswerBusy, f2: nil, f3: nil, next_state: SAllBusy},
+		},
+	},
+
+	/* passive states: we receive the call: */
+	State{
+		state: SPasivRing, voice: false, ring: true, playBusy: false, playWait: false, tout: 90,
+		transitions: []Transition{
+			Transition{cmd: t.CMD_TIMEOUT, f1: SendTimeOut, f2: nil, f3: nil, next_state: SIdle},
+			Transition{cmd: t.CMD_PICK_UP, f1: SendEstablish, f2: nil, f3: nil, next_state: SPasivConv},
+			Transition{cmd: t.CMD_HUP_THEIR, f1: nil, f2: nil, f3: nil, next_state: SIdle},
+			Transition{cmd: t.CMD_RING_BELL, f1: SetAnswerBusy, f2: nil, f3: nil, next_state: SPasivRing},
+		},
+	},
+	State{
+		state: SPasivConv, voice: false, ring: true, playBusy: false, playWait: false, tout: 600,
+		transitions: []Transition{
+			Transition{cmd: t.CMD_TIMEOUT, f1: SendHUP, f2: nil, f3: nil, next_state: SAllBusy},
+			Transition{cmd: t.CMD_HUP_OUR, f1: SendHUP, f2: nil, f3: nil, next_state: SIdle},
+			Transition{cmd: t.CMD_HUP_THEIR, f1: nil, f2: nil, f3: nil, next_state: SIdle},
+		},
+	},
+}
+
+var MOurNode long   /* our call end */
+var MTheirNode long /* their call end... */
+
+/* voice our MIC to their Phone */
+var MVoice bool = false
+
+/* Playback of sounds in our phone */
+var MBusy bool = false
+var MWait bool = false
+
+/* Do the ring */
+
+var MRing bool = false
+
+var MState = SIdle
+var MSysError bool = false
+var MTimeout bool = false /* Is current state timed out... */
 
 /* TODO: */
 var MMinNode = 1  /* search in random from... */
 var MMaxNode = 20 /* search in random to... */
+
+var MAnswer rune
+
+var MachineLock = &sync.Mutex{}
+
+//Search for free phone
+func GoFindFreePhone(ac *atmi.ATMICtx) error {
+
+	return nil
+}
+
+//Send timeout command to their node
+func SendTimeOut(ac *atmi.ATMICtx) error {
+
+	return nil
+}
+
+func SendHUP(ac *atmi.ATMICtx) error {
+
+	return nil
+}
+
+//Send Establish to their node
+func SendEstablish(ac *atmi.ATMICtx) error {
+
+	return nil
+}
+
+func SetAnswerBusy(ac *atmi.ATMICtx) error {
+
+	MAnswer = t.CMD_SIGNAL_BUSY
+	return nil
+}
+
+//Step the state machine - execute the transitions & switch the states
+//The exeuction/command sources can be different ones - internal routines
+//or XATMI servic call sources
+//NOTE: The time-out generator must fix the state at which it is started
+//If state is switched then timeout command must be ignored as it entered in
+//race condion.
+//@param cmd 	Command to run
+func StepStateMachine(ac *atmi.ATMICtx, cmd rune) {
+	MachineLock.Lock()
+
+	//Run the state machine here
+
+	MachineLock.Unlock()
+}
+
+//Ring the bell
+//@param
+func GoRing(node int) {
+
+	var revent int64
+
+	bellSvc := fmt.Sprintf("BELL%02d", node)
+
+	ret := SUCCEED
+
+	ac, errA := atmi.NewATMICtx()
+
+	if nil != errA {
+		fmt.Fprintf(os.Stderr, "Failed to allocate new context: %s",
+			errA.Message())
+		MSysError = true
+		os.Exit(atmi.FAIL)
+	}
+
+	//Return to the caller
+	defer func() {
+
+		ac.TpLogError("Ring terminates with  %d", ret)
+		MRing = false
+	}()
+
+	//Allocate configuration buffer
+	buf, errB := ac.NewUBF(16 * 1024)
+	if nil != errB {
+		ac.TpLogError("Failed to allocate buffer: [%s]", errB.Error())
+		MSysError = true
+		return
+	}
+
+	if errB := buf.BChg(u.A_CMD, 0, t.CMD_RING_BELL); errB != nil {
+		ac.TpLogError("Failed to set A_CMD to [%c]: [%s]",
+			t.CMD_RING_BELL, errB.Error())
+		MSysError = true
+		return
+	}
+
+	//Allocate data buffer (UBF)
+	cdP, errA := ac.TpConnect(bellSvc, buf.GetBuf(),
+		atmi.TPNOTRAN|atmi.TPSENDONLY) //<<< Set to RCVONLY to get segfault!
+
+	//Possible causes segementation faul!!!
+	defer ac.TpDiscon(cdP)
+
+	//Establish connection
+	for MRing {
+
+		buf.TpLogPrintUBF(atmi.LOG_DEBUG, "Sending ring clock...")
+
+		//Send audio data to playback... data
+		if errA := ac.TpSend(cdP, buf.GetBuf(), 0, &revent); nil != errA {
+
+			ac.TpLogError("Failed to send sound data: %s",
+				errA.Message())
+
+			ret = FAIL
+			return
+
+		}
+
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+//Redirec the voice from MIC to PHONE
+//@param
+func GoPlayback(node int, whatCmd string) {
+
+	var revent int64
+
+	playBackSvc := fmt.Sprintf("PLAYBACK%02d", node)
+
+	ret := SUCCEED
+
+	ac, errA := atmi.NewATMICtx()
+
+	if nil != errA {
+		fmt.Fprintf(os.Stderr, "Failed to allocate new context: %s",
+			errA.Message())
+		MSysError = true
+		os.Exit(atmi.FAIL)
+	}
+
+	//Return to the caller
+	defer func() {
+
+		ac.TpLogError("Voice terminates with  %d", ret)
+		MBusy = false
+		MWait = false
+	}()
+
+	//Allocate configuration buffer
+	buf, errB := ac.NewUBF(16 * 1024)
+	if nil != errB {
+		ac.TpLogError("Failed to allocate buffer: [%s]", errB.Error())
+		MSysError = true
+		return
+	}
+
+	if errB := buf.BChg(u.A_CMD, 0, whatCmd); errB != nil {
+		ac.TpLogError("Failed to set A_CMD to [%s]: [%s]",
+			whatCmd, errB.Error())
+		MSysError = true
+		return
+	}
+
+	//Allocate data buffer (UBF)
+	cdP, errA := ac.TpConnect(playBackSvc, buf.GetBuf(),
+		atmi.TPNOTRAN|atmi.TPSENDONLY) //<<< Set to RCVONLY to get segfault!
+
+	//Possible causes segementation faul!!!
+	defer ac.TpDiscon(cdP)
+
+	//Establish connection
+	for MBusy || MWait {
+
+		buf.TpLogPrintUBF(atmi.LOG_DEBUG, "Sending playback clock...")
+
+		//Send audio data to playback... data
+		if errA := ac.TpSend(cdP, buf.GetBuf(), 0, &revent); nil != errA {
+
+			ac.TpLogError("Failed to send sound data: %s",
+				errA.Message())
+
+			ret = FAIL
+			return
+
+		}
+
+		time.Sleep(100 * time.Millisecond)
+	}
+}
 
 //Redirec the voice from MIC to PHONE
 //@param
@@ -79,7 +364,7 @@ func GoVoice(fromMic int, toPhone int) {
 	defer ac.TpDiscon(cdP)
 
 	//Establish connection
-	for MInCall {
+	for MVoice {
 
 		//Get mic data
 		if errA := ac.TpRecv(cdM, buf.GetBuf(), 0, &revent); nil != errA {
@@ -145,13 +430,16 @@ func PHONE(ac *atmi.ATMICtx, svc *atmi.TPSVCINFO) {
 
 	case 0:
 		ac.TpLogInfo("Terminating call...")
-		MInCall = false
+		MVoice = false
+		MBusy = false
 		break
 
 	case 1:
 		ac.TpLogInfo("Starting call...")
-		MInCall = true
-		go GoVoice(19, 19)
+		MVoice = true
+		MBusy = true
+		//go GoVoice(19, 19)
+		go GoPlayback(19, "B")
 		break
 
 	default:
@@ -231,9 +519,10 @@ func Init(ac *atmi.ATMICtx) int {
 //@param ac ATMI Context
 func Uninit(ac *atmi.ATMICtx) {
 	ac.TpLogWarn("Server is shutting down...")
-	MInCall = false
-	MCallMode = CALL_MODE_NONE
-	MStage = CALL_STAGE_NONE
+
+	MVoice = false
+
+	//TODO: Generate basic HUP signal...
 }
 
 //Executable main entry point

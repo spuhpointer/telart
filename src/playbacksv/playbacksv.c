@@ -5,6 +5,7 @@
 #include <math.h>
 #include <errno.h>
 #include <signal.h>
+#include <sys/resource.h>
 
 #include <ndebug.h>
 #include <atmi.h>
@@ -39,10 +40,39 @@
 /*---------------------------Statics------------------------------------*/
 
 static char M_command[PATH_MAX]={0};
+static char M_busy[PATH_MAX]={0};
+static char M_wait[PATH_MAX]={0};
+
+static char *M_play; /* what to play... */
+
 /*---------------------------Prototypes---------------------------------*/
 
 /* TODO: Have a sig-child handler... */
 
+
+/**
+ * Run playback
+ */
+static pid_t run_play(void)
+{
+	pid_t child_pid;
+	
+	if (0==(child_pid=fork()))
+	{
+		/* this is child process... */
+		char *argv[]={ (char *) M_command, M_play, 0};
+
+		TP_LOG(log_info, "Executing: [%s]", argv[0]);		
+		
+		if (SUCCEED!=execv(argv[0], argv))
+		{
+			TP_LOG(log_error, "Failed to exec: %s", strerror(errno));
+			exit(FAIL);
+		}
+	}
+	
+	return child_pid;
+}
 /**
  * Service entry
  * @return SUCCEED/FAIL
@@ -52,10 +82,12 @@ void PLAYBACK (TPSVCINFO *p_svc)
 	int ret = SUCCEED;
 	FILE *fp=NULL;
 	char buf[32000];
-	char cmd[256];
+	char cmd;
 	long revent=0;
-	int child_stdin_pipe[2];
-	pid_t child_pid;
+	int was_sig = 1;
+	pid_t child_pid, sigc;
+	int stat_loc;
+	struct rusage rusage;
 	
 	BFLDLEN rd;
 
@@ -63,61 +95,50 @@ void PLAYBACK (TPSVCINFO *p_svc)
 
 	tplogprintubf(log_info, "Got request", p_ub);
 	
-	if (SUCCEED!=pipe(child_stdin_pipe))
+	/* get the command */
+	
+	if (SUCCEED!=Bget(p_ub, A_CMD, 0, &cmd, 0L))
 	{
-		TP_LOG(log_error, "Failed to pipe: %s", strerror(errno));
+		TP_LOG(log_error, "Failed to get A_CMD: %s", Bstrerror(Berror));
 		ret=FAIL;
 		goto out;
 	}
 	
-	if (0==(child_pid=fork()))
+	TP_LOG(log_info, "Got command: %c", cmd);
+	
+	switch (cmd)
 	{
-		/* this is child process... */
-		char *argv[]={ (char *) M_command, "-", 0};
-
-		/* char *argv[]={ "hexdump", "-o", 0}; */
-		
-		TP_LOG(log_info, "Executing: [%s]", argv[0]);
-		
-		/* copy stdin to read end of stdin pipe */
-		/* dup2(0, child_stdin_pipe[0]); */
-		
-		close(child_stdin_pipe[1]);
-		
-		dup2(child_stdin_pipe[0], STDIN_FILENO);
-		
-		if (SUCCEED!=execv(argv[0], argv))
-		{
-			TP_LOG(log_error, "Failed to exec: %s", strerror(errno));
-			exit(FAIL);
-		}
-		
-#if 0
-		while (FAIL!=(rd=read(child_stdin_pipe[0], buf, sizeof(buf))))
-		{
-			TP_DUMP(log_debug, "Got audio block", buf, rd);
-		}
-		  
-		TP_LOG(log_error, "Failed to read: %s", strerror(errno));
-#endif
+		case 'B':
+			M_play = M_busy;
+			break;
+		case 'W':
+			M_play = M_wait;
+			break;
+			
+		default:
+			TP_LOG(log_error, "Invalid command received %c!", cmd);
+			ret=FAIL;
+			goto out;
+			break;
 	}
 	
-	if (FAIL==child_pid)
-	{
-		TP_LOG(log_info, "Failed to fork: [%s]", strerror(errno));
-		ret=FAIL;
-		goto out;
-	}
-	
-	/* this is parent... */
-	close(child_stdin_pipe[0]); /* not used by parent */
-
         /* Check the process name in output... */
         while (SUCCEED==ret)
         {
-                /* Receive command stop play, or timeout - terminat the child...
-                 * thus terminate the playback...
-                 */
+		/* loop the player... */
+		if (was_sig && FAIL==(child_pid = run_play()))
+		{
+			TP_LOG(log_info, "Failed to fork: [%s]", strerror(errno));
+			ret=FAIL;
+			goto out;
+		}
+		
+		was_sig = 0;
+		
+		/* to play back at some interval we need to receive messages... */
+		/* Receive command stop play, or timeout - terminat the child...
+		 * thus terminate the playback...
+		 */
 		if (SUCCEED!=tprecv(p_svc->cd, (char **)&p_ub, 0L, 0L, &revent))
 		{
 			TP_LOG(log_error, "tpsend failed: %s", tpstrerror(tperrno));
@@ -143,31 +164,24 @@ void PLAYBACK (TPSVCINFO *p_svc)
 			goto out;
 		}
 		
-		/* send the data to conversational service */
-		rd = sizeof(buf);
-		if (SUCCEED!=Bget(p_ub, A_DATA, 0, buf, &rd))
-		{
-			TP_LOG(log_error, "Failed to get A_DATA: %s", 
-			       Bstrerror(Berror));
-			ret=FAIL;
-			goto out;
-		}
+		/* check the child exit... */
 		
-                TP_DUMP(log_debug, "Recevied audio block", buf, rd);
-		
-		if (FAIL==write(child_stdin_pipe[1], buf, rd))
+		while ((sigc=wait3(&stat_loc, WNOHANG|WUNTRACED, &rusage)) > 0)
 		{
-			TP_LOG(log_error, "Failed to write to aplay: %s",
-			       strerror(errno));
-			ret=FAIL;
-			goto out;
+			TP_LOG(log_info, "Got SIGCHLD...")
+			was_sig = 1;
+			if (sigc == child_pid)
+			{
+				child_pid=0;
+			}
 		}
         }
         
 out:
-
-	close(child_stdin_pipe[1]);
-	kill(child_pid, SIGINT);
+	if (child_pid>0)
+	{
+		kill(child_pid, SIGINT);
+	}
 
 	tpreturn(  ret==SUCCEED?TPSUCCESS:TPFAIL,
 		0L,
@@ -200,7 +214,7 @@ int init(int argc, char** argv)
 	
 	TP_LOG(log_info, "Initializing...");
 
-        signal(SIGCHLD, SIG_IGN);
+        /* signal(SIGCHLD, SIG_IGN); */
 
 	if (SUCCEED!=tpinit(NULL))
 	{
@@ -283,9 +297,19 @@ int init(int argc, char** argv)
 			strncpy((char *)M_command, val, sizeof(M_command));
 			M_command[sizeof(M_command)-1] = 0;
 		}
-		else if (0==strcmp(key, "someparam2"))
+		else if (0==strcmp(key, "busy"))
 		{
-			TP_LOG(log_debug, "Got param2: [%s]", val);
+			TP_LOG(log_debug, "Got busy: [%s]", val);
+			
+			strncpy((char *)M_busy, val, sizeof(M_busy));
+			M_busy[sizeof(M_busy)-1] = 0;
+		}
+		else if (0==strcmp(key, "wait"))
+		{
+			TP_LOG(log_debug, "Got wait: [%s]", val);
+			
+			strncpy((char *)M_wait, val, sizeof(M_wait));
+			M_busy[sizeof(M_wait)-1] = 0;
 		}
 		else
 		{
@@ -302,6 +326,20 @@ int init(int argc, char** argv)
 		goto out;
 	}
 	
+	
+	if (!M_busy[0])
+	{
+		TP_LOG(log_error, "Missing 'busy' argument!");
+		ret=FAIL;
+		goto out;
+	}
+	
+	if (!M_wait[0])
+	{
+		TP_LOG(log_error, "Missing 'wait' argument!");
+		ret=FAIL;
+		goto out;
+	}
 	
 	/* Advertise our service according to our cluster node id */
 	sprintf(svcnm, "PLAYBACK%02ld", tpgetnodeid());

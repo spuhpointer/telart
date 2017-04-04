@@ -106,14 +106,14 @@
 			<appopt>-f -n13 -r -i 0.0.0.0 -p 21003 -tA -z30</appopt>
 		</server>
 		<server name="micsv">
-		        <ping_max>90000</ping_max>
+		        <pingtime>0</pingtime>
 			<min>1</min>
 			<max>1</max>
 			<srvid>2000</srvid>
 			<sysopt>-e ${NDRX_APPHOME}/log/micsv.log -r</sysopt>
 		</server>
 		<server name="liveplaysv">
-		        <ping_max>900000</ping_max>
+		        <pingtime>0</pingtime>
 			<min>1</min>
 			<max>1</max>
 			<srvid>2500</srvid>
@@ -124,6 +124,13 @@
 			<max>1</max>
 			<srvid>3000</srvid>
 			<sysopt>-e ${NDRX_APPHOME}/log/phonesv.log -r</sysopt>
+		</server>
+		<server name="playbacksv">
+		        <pingtime>0</pingtime>
+			<min>1</min>
+			<max>1</max>
+			<srvid>3500</srvid>
+			<sysopt>-e ${NDRX_APPHOME}/log/playbacksv.log -r</sysopt>
 		</server>
 		<server name="cpmsrv">
 			<min>1</min>
