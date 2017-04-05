@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	t "include"
+	"math/rand"
 	"os"
 	"sync"
 	"time"
@@ -26,15 +27,49 @@ const (
 	SActivConv = "ActConv"      /* Active conversation */
 	SPasivRing = "PasivRing"    /* We go the ring */
 	SPasivConv = "PasivConv"    /* We go into conversion */
+
+	ConstFindPhoneTime = 30 /* Search for phone 30 sec */
 )
 
-type TransitionFunc func(ac *atmi.ATMICtx) error
+//Get UTC milliseconds since epoch
+//@return epoch milliseconds
+func GetEpochMillis() int64 {
+	now := time.Now()
+	nanos := now.UnixNano()
+	millis := nanos / 1000000
+
+	return millis
+}
+
+//About incoming & outgoing messages:
+type StopWatch struct {
+	start int64 //Timestamp messag sent
+}
+
+//Reset the stopwatch
+func (s *StopWatch) Reset() {
+	s.start = GetEpochMillis()
+}
+
+//Get delta milliseconds
+//@return time spent in milliseconds
+func (s *StopWatch) GetDeltaMillis() int64 {
+	return GetEpochMillis() - s.start
+}
+
+//Get delta seconds of the stopwatch
+//@return return seconds spent
+func (s *StopWatch) GetDetlaSec() int64 {
+	return (GetEpochMillis() - s.start) / 1000
+}
+
+type TransitionFunc func(ac *atmi.ATMICtx) atmi.ATMIError
+
+type TransitionFuncTranslate func(ac *atmi.ATMICtx, errA atmi.ATMIError) string
 
 type Transition struct {
 	cmd        byte           /* Command, see t.CMD_ */
-	f1         TransitionFunc /* transision func 1 */
-	f2         TransitionFunc /* transision func 2 */
-	f3         TransitionFunc /* transision func 3 */
+	f          TransitionFunc /* transision func 1 */
 	next_state string         /* Next state */
 }
 
@@ -53,62 +88,67 @@ var Machine = []State{
 	State{
 		state: SIdle, voice: false, ring: false, playBusy: false, playWait: false, tout: -1,
 		transitions: []Transition{
-			Transition{cmd: t.CMD_HUP_OUR, f1: nil, f2: nil, f3: nil, next_state: SIdle},
-			Transition{cmd: t.CMD_PICK_OUR, f1: GoFindFreePhone, f2: nil, f3: nil, next_state: SActivFind},
+			/* if having some late tout... */
+			Transition{cmd: t.CMD_TIMEOUT, f: nil, next_state: SIdle},
+			Transition{cmd: t.CMD_HUP_OUR, f: nil, next_state: SIdle},
+			Transition{cmd: t.CMD_PICK_OUR, f: GoFindFreePhone, next_state: SActivFind},
 			/* They send us ring the bell - if idle, accept... */
-			Transition{cmd: t.CMD_RING_BELL, f1: SetLockToPartner, f2: nil, f3: nil, next_state: SPasivRing},
+			Transition{cmd: t.CMD_RING_BELL, f: SetLockToPartner, next_state: SPasivRing},
 		},
 	},
 	State{
-		state: SActivFind, voice: false, ring: false, playBusy: false, playWait: true, tout: 90,
+		state: SActivFind, voice: false, ring: false, playBusy: false, playWait: true, tout: ConstFindPhoneTime,
 		transitions: []Transition{
-			Transition{cmd: t.CMD_TIMEOUT, f1: nil, f2: nil, f3: nil, next_state: SAllBusy},
-			Transition{cmd: t.CMD_FOUND, f1: nil, f2: nil, f3: nil, next_state: SActivRing},
+			Transition{cmd: t.CMD_TIMEOUT, f: nil, next_state: SAllBusy},
+			Transition{cmd: t.CMD_FOUND, f: nil, next_state: SActivRing},
 		},
 	},
 	State{
-		state: SActivRing, voice: false, ring: false, playBusy: false, playWait: true, tout: 90,
+		/* ring their */
+		state: SActivRing, voice: false, ring: true, playBusy: false, playWait: true, tout: ConstFindPhoneTime,
 		transitions: []Transition{
-			Transition{cmd: t.CMD_TIMEOUT, f1: nil, f2: nil, f3: nil, next_state: SAllBusy},
+			Transition{cmd: t.CMD_TIMEOUT, f: nil, next_state: SAllBusy},
 			/* they send us establish... */
-			Transition{cmd: t.CMD_PICK_THEIR, f1: nil, f2: nil, f3: nil, next_state: SActivConv},
-			Transition{cmd: t.CMD_HUP_OUR, f1: SendHUP, f2: nil, f3: nil, next_state: SIdle},
-			Transition{cmd: t.CMD_RING_BELL, f1: SetAnswerBusy, f2: nil, f3: nil, next_state: SActivRing},
+			Transition{cmd: t.CMD_PICK_THEIR, f: nil, next_state: SActivConv},
+			Transition{cmd: t.CMD_HUP_OUR, f: SendHUP, next_state: SIdle},
+			Transition{cmd: t.CMD_RING_BELL, f: SetAnswerBusy, next_state: SActivRing},
 		},
 	},
 	State{
 		state: SActivConv, voice: false, ring: false, playBusy: false, playWait: false, tout: 600,
 		transitions: []Transition{
-			Transition{cmd: t.CMD_TIMEOUT, f1: SendHUP, f2: nil, f3: nil, next_state: SAllBusy},
-			Transition{cmd: t.CMD_HUP_OUR, f1: SendHUP, f2: nil, f3: nil, next_state: SIdle},
-			Transition{cmd: t.CMD_HUP_THEIR, f1: nil, f2: nil, f3: nil, next_state: SAllBusy},
-			Transition{cmd: t.CMD_RING_BELL, f1: SetAnswerBusy, f2: nil, f3: nil, next_state: SActivConv},
+			Transition{cmd: t.CMD_TIMEOUT, f: SendHUP, next_state: SAllBusy},
+			Transition{cmd: t.CMD_HUP_OUR, f: SendHUP, next_state: SIdle},
+			Transition{cmd: t.CMD_HUP_THEIR, f: nil, next_state: SAllBusy},
+			Transition{cmd: t.CMD_RING_BELL, f: SetAnswerBusy, next_state: SActivConv},
 		},
 	},
 	State{
 		state: SAllBusy, voice: false, ring: false, playBusy: true, playWait: false, tout: -1,
 		transitions: []Transition{
-			Transition{cmd: t.CMD_HUP_OUR, f1: nil, f2: nil, f3: nil, next_state: SIdle},
-			Transition{cmd: t.CMD_RING_BELL, f1: SetAnswerBusy, f2: nil, f3: nil, next_state: SAllBusy},
+			Transition{cmd: t.CMD_HUP_OUR, f: nil, next_state: SIdle},
+			Transition{cmd: t.CMD_RING_BELL, f: SetAnswerBusy, next_state: SAllBusy},
 		},
 	},
 
-	/* passive states: we receive the call: */
+	/* passive states: we receive the call:
+	 * The other node is generating ring...
+	 */
 	State{
-		state: SPasivRing, voice: false, ring: true, playBusy: false, playWait: false, tout: 90,
+		state: SPasivRing, voice: false, ring: false, playBusy: false, playWait: false, tout: 90,
 		transitions: []Transition{
-			Transition{cmd: t.CMD_TIMEOUT, f1: SendTimeOut, f2: nil, f3: nil, next_state: SIdle},
-			Transition{cmd: t.CMD_PICK_OUR, f1: SendPick, f2: nil, f3: nil, next_state: SPasivConv},
-			Transition{cmd: t.CMD_HUP_THEIR, f1: nil, f2: nil, f3: nil, next_state: SIdle},
-			Transition{cmd: t.CMD_RING_BELL, f1: SetAnswerBusy, f2: nil, f3: nil, next_state: SPasivRing},
+			Transition{cmd: t.CMD_TIMEOUT, f: SendTimeOut, next_state: SIdle},
+			Transition{cmd: t.CMD_PICK_OUR, f: SendPick, next_state: SPasivConv},
+			Transition{cmd: t.CMD_HUP_THEIR, f: nil, next_state: SIdle},
+			Transition{cmd: t.CMD_RING_BELL, f: SetAnswerBusy, next_state: SPasivRing},
 		},
 	},
 	State{
-		state: SPasivConv, voice: false, ring: true, playBusy: false, playWait: false, tout: 600,
+		state: SPasivConv, voice: true, ring: false, playBusy: false, playWait: false, tout: 600,
 		transitions: []Transition{
-			Transition{cmd: t.CMD_TIMEOUT, f1: SendHUP, f2: nil, f3: nil, next_state: SAllBusy},
-			Transition{cmd: t.CMD_HUP_OUR, f1: SendHUP, f2: nil, f3: nil, next_state: SIdle},
-			Transition{cmd: t.CMD_HUP_THEIR, f1: nil, f2: nil, f3: nil, next_state: SIdle},
+			Transition{cmd: t.CMD_TIMEOUT, f: SendHUP, next_state: SAllBusy},
+			Transition{cmd: t.CMD_HUP_OUR, f: SendHUP, next_state: SIdle},
+			Transition{cmd: t.CMD_HUP_THEIR, f: nil, next_state: SIdle},
 		},
 	},
 }
@@ -132,9 +172,8 @@ var MState = SIdle
 var MSysError bool = false
 var MTimeout bool = false /* Is current state timed out... */
 
-/* TODO: */
-var MMinNode = 1  /* search in random from... */
-var MMaxNode = 20 /* search in random to... */
+var MMinNode = 1 /* search in random from... */
+var MMaxNode = 6 /* search in random to... */
 
 var MAnswer byte
 
@@ -143,36 +182,132 @@ var MachineLock = &sync.Mutex{}
 var MTout = -1
 var MToutStamp int64
 
+var MScheduleNextCmd byte = 0 /* No command at the moment */
+
 //Send the command to locked partner
-func SendCmd(ac *atmi.ATMICtx, cmd byte) error {
+//@param ac	ATMI Context into which send the command
+//@param cmd	Command out
+//@param cmd	Command received back...
+//@return error or nil
+func SendCmd(ac *atmi.ATMICtx, cmd byte, cmdRet *byte) atmi.ATMIError {
+	buf, errB := ac.NewUBF(16 * 1024)
+	if nil != errB {
+		ac.TpLogError("Failed to allocate buffer: [%s]", errB.Error())
+		MSysError = true
+		return atmi.NewCustomATMIError(atmi.TPESYSTEM,
+			fmt.Sprintf("Failed to allocate buffer: [%s]", errB.Error()))
+	}
+
+	if errB := buf.BChg(u.A_CMD, 0, cmd); errB != nil {
+		ac.TpLogError("Failed to set A_CMD to [%c]: [%s]",
+			cmd, errB.Error())
+		MSysError = true
+
+		return atmi.NewCustomATMIError(atmi.TPESYSTEM,
+			fmt.Sprintf("Failed to set A_CMD to [%c]: [%s]",
+				cmd, errB.Error()))
+	}
+
+	if errB := buf.BChg(u.A_SRC_NODE, 0, MOurNode); errB != nil {
+		ac.TpLogError("Failed to set A_SRC_NODE: [%s]",
+			errB.Error())
+		MSysError = true
+
+		return atmi.NewCustomATMIError(atmi.TPESYSTEM,
+			fmt.Sprintf("Failed to set A_SRC_NODE: [%s]",
+				errB.Error()))
+	}
+
+	//Call the server
+	svc := fmt.Sprintf("PHONE%02d", MTheirNode)
+
+	ac.TpLogInfo("Calling phone: [%s]", svc)
+
+	if _, err := ac.TpCall(svc, buf, 0); nil != err {
+		ac.TpLogError("ATMI Error %d:[%s]", err.Code(), err.Message())
+		return err
+	}
+
+	/* read the command back */
+	*cmdRet = 0
+
+	if *cmdRet, errB = buf.BGetByte(u.A_CMD, 0); errB != nil {
+		ac.TpLogError("Failed to get A_CMD from phone call: [%s]",
+			cmd, errB.Error())
+	}
+
+	ac.TpLogInfo("Got command back: %c", rune(*cmdRet))
+
+	return nil
 
 }
 
+func random(min, max int) int {
+	rand.Seed(time.Now().Unix())
+	return rand.Intn(max-min) + min
+}
+
 //Search for free phone
-func GoFindFreePhone(ac *atmi.ATMICtx) error {
+func GoFindFreePhone(ac *atmi.ATMICtx) atmi.ATMIError {
+
+	var w StopWatch
+
+	MTheirNode = 0
+	w.Reset()
+
+	for w.GetDetlaSec() < ConstFindPhoneTime {
+		//Get random host
+		tryNode := random(MMinNode, MMaxNode)
+
+		ac.TpLogInfo("Trying to call to: %d", tryNode)
+		//Try to access it
+		var cmdRet byte
+
+		errA := SendCmd(ac, t.CMD_RING_BELL, &cmdRet)
+
+		if errA.Code() == atmi.TPMINVAL {
+			ac.TpLogInfo("Call ok, command ret: %c", rune(cmdRet))
+			if cmdRet == t.CMD_PICK_THEIR {
+				ac.TpLogInfo("Their accepted incoming call")
+				MTheirNode = tryNode
+			}
+		} else {
+			//If not locked, then sleep(500 ms)
+			//Ignore the error on get some sleep
+			time.Sleep(time.Duration(500) * time.Millisecond)
+		}
+	}
+
+	//Generate timeout...
+	if MTheirNode > 0 {
+		MScheduleNextCmd = t.CMD_TIMEOUT
+	} else {
+		MScheduleNextCmd = t.CMD_PICK_THEIR
+	}
 
 	return nil
 }
 
 //Send timeout command to their node
-func SendTimeOut(ac *atmi.ATMICtx) error {
-
-	return nil
+func SendTimeOut(ac *atmi.ATMICtx) atmi.ATMIError {
+	var cmdRet byte
+	return SendCmd(ac, t.CMD_TIMEOUT, &cmdRet)
 }
 
-func SendHUP(ac *atmi.ATMICtx) error {
-
-	return nil
+//Send HUP signal to their
+func SendHUP(ac *atmi.ATMICtx) atmi.ATMIError {
+	var cmdRet byte
+	return SendCmd(ac, t.CMD_HUP_THEIR, &cmdRet)
 }
 
 //Send Establish to their node
-func SendPick(ac *atmi.ATMICtx) error {
-
-	return nil
+func SendPick(ac *atmi.ATMICtx) atmi.ATMIError {
+	var cmdRet byte
+	return SendCmd(ac, t.CMD_PICK_THEIR, &cmdRet)
 }
 
 //We are locking to to caller partner
-func SetLockToPartner(ac *atmi.ATMICtx) error {
+func SetLockToPartner(ac *atmi.ATMICtx) atmi.ATMIError {
 	ac.TpLogInfo("Locking to partner: %d", MTheirNodeLast)
 	MTheirNode = MTheirNodeLast
 	MAnswer = t.CMD_LOCK
@@ -180,7 +315,7 @@ func SetLockToPartner(ac *atmi.ATMICtx) error {
 }
 
 //We are busy, thus respond with busy signal...
-func SetAnswerBusy(ac *atmi.ATMICtx) error {
+func SetAnswerBusy(ac *atmi.ATMICtx) atmi.ATMIError {
 	ac.TpLogInfo("Sending to partner: %d busy signal", MTheirNodeLast)
 	MAnswer = t.CMD_SIGNAL_BUSY
 	return nil
@@ -258,6 +393,7 @@ func GoTimeout() {
 func StepStateMachine(ac *atmi.ATMICtx, cmd byte) {
 	MachineLock.Lock()
 
+next:
 	ac.TpLogInfo("Current state: [%s], got command: %c", MState, rune(cmd))
 	curState := FindState(MState)
 
@@ -279,19 +415,10 @@ func StepStateMachine(ac *atmi.ATMICtx, cmd byte) {
 	ac.TpLogInfo("Executing transition, next state: [%s]", curTran.next_state)
 
 	/* execute transisions... */
-	if nil != curTran.f1 {
+	if nil != curTran.f {
 		ac.TpLogInfo("Executing f1")
-		curTran.f1(ac)
-	}
-
-	if nil != curTran.f2 {
-		ac.TpLogInfo("Executing f2")
-		curTran.f2(ac)
-	}
-
-	if nil != curTran.f3 {
-		ac.TpLogInfo("Executing f3")
-		curTran.f3(ac)
+		err := curTran.f(ac)
+		ac.TpLogInfo("Got error from transition: [%s] - ignore.", err.Error())
 	}
 
 	/* Switch next state... */
@@ -328,7 +455,7 @@ func StepStateMachine(ac *atmi.ATMICtx, cmd byte) {
 	if nextState.ring && !MRing {
 		ac.TpLogWarn("Ring start")
 		MRing = true
-		go GoRing(MOurNode)
+		go GoRing(MTheirNode)
 	} else if !nextState.voice && MRing {
 		ac.TpLogWarn("Ring terminate")
 		MRing = false
@@ -365,6 +492,12 @@ func StepStateMachine(ac *atmi.ATMICtx, cmd byte) {
 		ac.TpLogInfo("Setting timeout to: %d", nextState.tout)
 
 		go GoTimeout()
+	}
+
+	if MScheduleNextCmd > 0 {
+		cmd = MScheduleNextCmd
+		MScheduleNextCmd = 0
+		goto next
 	}
 
 	MachineLock.Unlock()
@@ -530,6 +663,10 @@ func GoVoice(fromMic int, toPhone int) {
 	defer func() {
 
 		ac.TpLogError("Voice terminates with  %d", ret)
+
+		if SUCCEED != ret {
+			StepStateMachine(ac, t.CMD_SYSERR)
+		}
 	}()
 
 	//Allocate configuration buffer
@@ -555,11 +692,15 @@ func GoVoice(fromMic int, toPhone int) {
 		//Get mic data
 		if errA := ac.TpRecv(cdM, buf.GetBuf(), 0, &revent); nil != errA {
 
-			ac.TpLogError("Failed to receive mic data: %s",
-				errA.Message())
+			ac.TpLogError("Failed to receive mic data: %s (%d)",
+				errA.Message(), revent)
 
-			ret = FAIL
+			if revent != atmi.TPEV_DISCONIMM {
+				ret = FAIL
+			}
+
 			return
+
 		}
 
 		buf.TpLogPrintUBF(atmi.LOG_DEBUG, "Transfering")
@@ -567,10 +708,13 @@ func GoVoice(fromMic int, toPhone int) {
 		//Send audio data to playback... data
 		if errA := ac.TpSend(cdP, buf.GetBuf(), 0, &revent); nil != errA {
 
-			ac.TpLogError("Failed to send sound data: %s",
-				errA.Message())
+			ac.TpLogError("Failed to send sound data: %s (%d)",
+				errA.Message(), revent)
 
-			ret = FAIL
+			if revent != atmi.TPEV_DISCONIMM {
+				ret = FAIL
+			}
+
 			return
 
 		}
@@ -701,9 +845,13 @@ func Init(ac *atmi.ATMICtx) int {
 
 		switch fldName {
 
-		case "mykey1":
-			myval, _ := buf.BGetString(u.EX_CC_VALUE, occ)
-			ac.TpLogDebug("Got [%s] = [%s] ", fldName, myval)
+		case "min":
+			MMinNode, _ := buf.BGetInt(u.EX_CC_VALUE, occ)
+			ac.TpLogDebug("Got [%s] = [%d] ", fldName, MMinNode)
+			break
+		case "max":
+			MMaxNode, _ := buf.BGetInt(u.EX_CC_VALUE, occ)
+			ac.TpLogDebug("Got [%s] = [%d] ", fldName, MMaxNode)
 			break
 
 		default:
