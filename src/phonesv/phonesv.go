@@ -70,6 +70,7 @@ type TransitionFuncTranslate func(ac *atmi.ATMICtx, errA atmi.ATMIError) string
 type Transition struct {
 	cmd        byte           /* Command, see t.CMD_ */
 	f          TransitionFunc /* transision func 1 */
+	a          TransitionFunc /* transision func 1, async */
 	next_state string         /* Next state */
 }
 
@@ -91,7 +92,7 @@ var Machine = []State{
 			/* if having some late tout... */
 			Transition{cmd: t.CMD_TIMEOUT, f: nil, next_state: SIdle},
 			Transition{cmd: t.CMD_HUP_OUR, f: nil, next_state: SIdle},
-			Transition{cmd: t.CMD_PICK_OUR, f: GoFindFreePhone, next_state: SActivFind},
+			Transition{cmd: t.CMD_PICK_OUR, a: GoFindFreePhone, next_state: SActivFind},
 			/* They send us ring the bell - if idle, accept... */
 			Transition{cmd: t.CMD_RING_BELL, f: SetLockToPartner, next_state: SPasivRing},
 		},
@@ -110,15 +111,15 @@ var Machine = []State{
 			Transition{cmd: t.CMD_TIMEOUT, f: nil, next_state: SAllBusy},
 			/* they send us establish... */
 			Transition{cmd: t.CMD_PICK_THEIR, f: nil, next_state: SActivConv},
-			Transition{cmd: t.CMD_HUP_OUR, f: SendHUP, next_state: SIdle},
+			Transition{cmd: t.CMD_HUP_OUR, a: SendHUP, next_state: SIdle},
 			Transition{cmd: t.CMD_RING_BELL, f: SetAnswerBusy, next_state: SActivRing},
 		},
 	},
 	State{
 		state: SActivConv, voice: false, ring: false, playBusy: false, playWait: false, tout: 600,
 		transitions: []Transition{
-			Transition{cmd: t.CMD_TIMEOUT, f: SendHUP, next_state: SAllBusy},
-			Transition{cmd: t.CMD_HUP_OUR, f: SendHUP, next_state: SIdle},
+			Transition{cmd: t.CMD_TIMEOUT, a: SendHUP, next_state: SAllBusy},
+			Transition{cmd: t.CMD_HUP_OUR, a: SendHUP, next_state: SIdle},
 			Transition{cmd: t.CMD_HUP_THEIR, f: nil, next_state: SAllBusy},
 			Transition{cmd: t.CMD_RING_BELL, f: SetAnswerBusy, next_state: SActivConv},
 		},
@@ -248,18 +249,27 @@ func random(min, max int) int {
 }
 
 //Search for free phone
-func GoFindFreePhone(ac *atmi.ATMICtx) atmi.ATMIError {
+func GoFindFreePhone(_ac *atmi.ATMICtx) atmi.ATMIError {
 
 	var w StopWatch
+
+	ac, errA := atmi.NewATMICtx()
+
+	if nil != errA {
+		fmt.Fprintf(os.Stderr, "Failed to allocate new context: %s",
+			errA.Message())
+		MSysError = true
+		os.Exit(atmi.FAIL)
+	}
 
 	MTheirNode = 0
 	w.Reset()
 
 	for w.GetDetlaSec() < ConstFindPhoneTime {
 		//Get random host
-		tryNode := random(MMinNode, MMaxNode)
+		MTheirNode = random(MMinNode, MMaxNode)
 
-		ac.TpLogInfo("Trying to call to: %d", tryNode)
+		ac.TpLogInfo("Trying to call to: %d", MTheirNode)
 		//Try to access it
 		var cmdRet byte
 
@@ -269,7 +279,6 @@ func GoFindFreePhone(ac *atmi.ATMICtx) atmi.ATMIError {
 			ac.TpLogInfo("Call ok, command ret: %c", rune(cmdRet))
 			if cmdRet == t.CMD_PICK_THEIR {
 				ac.TpLogInfo("Their accepted incoming call")
-				MTheirNode = tryNode
 			}
 		} else {
 			//If not locked, then sleep(500 ms)
@@ -295,8 +304,18 @@ func SendTimeOut(ac *atmi.ATMICtx) atmi.ATMIError {
 }
 
 //Send HUP signal to their
-func SendHUP(ac *atmi.ATMICtx) atmi.ATMIError {
+func SendHUP(_ac *atmi.ATMICtx) atmi.ATMIError {
 	var cmdRet byte
+
+	ac, errA := atmi.NewATMICtx()
+
+	if nil != errA {
+		fmt.Fprintf(os.Stderr, "Failed to allocate new context: %s",
+			errA.Message())
+		MSysError = true
+		os.Exit(atmi.FAIL)
+	}
+
 	return SendCmd(ac, t.CMD_HUP_THEIR, &cmdRet)
 }
 
@@ -421,6 +440,11 @@ next:
 		ac.TpLogInfo("Got error from transition: [%s] - ignore.", err.Error())
 	}
 
+	if nil != curTran.a {
+		ac.TpLogInfo("Executing async tran func")
+		go curTran.a(ac)
+	}
+
 	/* Switch next state... */
 	nextState := FindState(curTran.next_state)
 	if nil == nextState {
@@ -509,7 +533,7 @@ func GoRing(node int) {
 
 	var revent int64
 
-	bellSvc := fmt.Sprintf("BELL%02d", node)
+	bellSvc := fmt.Sprintf("RING%02d", node)
 
 	ret := SUCCEED
 
@@ -554,13 +578,16 @@ func GoRing(node int) {
 	//Establish connection
 	for MRing {
 
-		buf.TpLogPrintUBF(atmi.LOG_DEBUG, "Sending ring clock...")
+		buf.TpLogPrintUBF(atmi.LOG_DEBUG, "Sending ring tick...")
 
 		//Send audio data to playback... data
 		if errA := ac.TpSend(cdP, buf.GetBuf(), 0, &revent); nil != errA {
 
 			ac.TpLogError("Failed to send sound data: %s",
 				errA.Message())
+
+			//Send hup from their side
+			StepStateMachine(ac, t.CMD_HUP_OUR)
 
 			ret = FAIL
 			return
@@ -711,6 +738,8 @@ func GoVoice(fromMic int, toPhone int) {
 			ac.TpLogError("Failed to send sound data: %s (%d)",
 				errA.Message(), revent)
 
+			//Extra insurance...
+			StepStateMachine(ac, t.CMD_HUP_THEIR)
 			if revent != atmi.TPEV_DISCONIMM {
 				ret = FAIL
 			}
@@ -738,6 +767,9 @@ func PHONE(ac *atmi.ATMICtx, svc *atmi.TPSVCINFO) {
 			ac.TpReturn(atmi.TPFAIL, 0, &svc.Data, 0)
 		}
 	}()
+
+	MRing = true
+	go GoRing(19)
 
 	//Get UBF Handler
 	ub, _ := ac.CastToUBF(&svc.Data)
@@ -804,6 +836,7 @@ func PHONE(ac *atmi.ATMICtx, svc *atmi.TPSVCINFO) {
 func Init(ac *atmi.ATMICtx) int {
 
 	ac.TpLogWarn("Doing server init...")
+
 	if err := ac.TpInit(); err != nil {
 		return FAIL
 	}
@@ -859,9 +892,13 @@ func Init(ac *atmi.ATMICtx) int {
 			break
 		}
 	}
+
+	MOurNode = int(ac.TpGetnodeId())
 	//Advertize service
-	if err := ac.TpAdvertise("PHONE", "PHONE", PHONE); err != nil {
-		ac.TpLogError("Failed to Advertise: ATMI Error %d:[%s]\n", err.Code(), err.Message())
+	if err := ac.TpAdvertise(fmt.Sprintf("PHONE%02d", MOurNode),
+		"PHONE", PHONE); err != nil {
+		ac.TpLogError("Failed to Advertise: ATMI Error %d:[%s]\n",
+			err.Code(), err.Message())
 		return atmi.FAIL
 	}
 

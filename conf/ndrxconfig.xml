@@ -132,6 +132,13 @@
 			<srvid>3500</srvid>
 			<sysopt>-e ${NDRX_APPHOME}/log/playbacksv.log -r</sysopt>
 		</server>
+		<server name="ringsv.py">
+		        <pingtime>0</pingtime>
+			<min>1</min>
+			<max>1</max>
+			<srvid>3600</srvid>
+			<sysopt>-e ${NDRX_APPHOME}/log/ringsv.log -r</sysopt>
+		</server>
 		<server name="cpmsrv">
 			<min>1</min>
 			<max>1</max>
