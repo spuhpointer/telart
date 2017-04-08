@@ -15,7 +15,7 @@ from endurox.atmi import *
 from endurox.ubfbuffer import *
 
 
-GPIO.setup(4, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
+GPIO.setup(2, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
 presses = 1
 
 svc = "PHONE%02d" % (tpgetnodeid())
@@ -29,7 +29,7 @@ def my_callback(channel):
 
 	
 	Cmd = ""
-	if GPIO.input(4):
+	if GPIO.input(2):
 		print "RISING"
 		Cmd = "P"
 	else:
@@ -37,13 +37,16 @@ def my_callback(channel):
 
 	inp = UbfBuffer()
 	inp['A_SRC_NODE'][0] = "%d" % tpgetnodeid()
-	inp['A_CMD'][0] = Cmd
+	inp['A_CMD'][0] = "%s" % Cmd
 	print inp
 	res =  tpcall(svc, inp.as_dictionary(), TPNOTRAN)
 	print res
 	presses += 1
 
-GPIO.add_event_detect(4, GPIO.BOTH, callback=my_callback, bouncetime=100)
+GPIO.add_event_detect(2, GPIO.BOTH, callback=my_callback, bouncetime=100)
+
+# reset channel..
+my_callback(1)
 
 print "Waiting"
 while True:
@@ -51,5 +54,4 @@ while True:
 		time.sleep(5)
 	except KeyboardInterrupt:
         	GPIO.cleanup()
-        break
 

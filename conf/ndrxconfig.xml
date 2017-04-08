@@ -214,7 +214,7 @@
 	-->
 	<clients>
 		<client cmdline="hupcl.py">
-			<exec tag="HUP" autostart="N" subsect="" log="${NDRX_APPHOME}/log/hupcl.log"/>
+			<exec tag="HUP" autostart="Y" subsect="" log="${NDRX_APPHOME}/log/hupcl.log"/>
 		</client>
 	</clients>
 </endurox>

@@ -768,9 +768,6 @@ func PHONE(ac *atmi.ATMICtx, svc *atmi.TPSVCINFO) {
 		}
 	}()
 
-	MRing = true
-	go GoRing(19)
-
 	//Get UBF Handler
 	ub, _ := ac.CastToUBF(&svc.Data)
 
