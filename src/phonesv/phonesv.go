@@ -28,7 +28,7 @@ const (
 	SPasivRing = "PasivRing"    /* We go the ring */
 	SPasivConv = "PasivConv"    /* We go into conversion */
 
-	ConstFindPhoneTime = 30 /* Search for phone 30 sec */
+	ConstFindPhoneTime = 10 /* Search for phone 30 sec */
 )
 
 //Get UTC milliseconds since epoch
@@ -439,7 +439,9 @@ next:
 	if nil != curTran.f {
 		ac.TpLogInfo("Executing f1")
 		err := curTran.f(ac)
-		ac.TpLogInfo("Got error from transition: [%s] - ignore.", err.Error())
+		if err!=nil {
+			ac.TpLogInfo("Got error from transition: [%s] - ignore.", err.Error())
+		}
 	}
 
 	if nil != curTran.a {
@@ -482,7 +484,7 @@ next:
 		ac.TpLogWarn("Ring start")
 		MRing = true
 		go GoRing(MTheirNode)
-	} else if !nextState.voice && MRing {
+	} else if !nextState.ring && MRing {
 		ac.TpLogWarn("Ring terminate")
 		MRing = false
 	}
@@ -492,17 +494,17 @@ next:
 		ac.TpLogWarn("Play Busy start")
 		MBusy = true
 		go GoPlayback(MOurNode, t.CMD_SIGNAL_BUSY)
-	} else if !nextState.voice && MBusy {
+	} else if !nextState.playBusy && MBusy {
 		ac.TpLogWarn("Play Busy terminate")
 		MBusy = false
 	}
 
 	/* Process wait block: */
-	if nextState.playBusy && !MWait {
+	if nextState.playWait && !MWait {
 		ac.TpLogWarn("Play Wait start")
 		MWait = true
-		go GoPlayback(MOurNode, t.CMD_SIGNAL_BUSY)
-	} else if !nextState.voice && MWait {
+		go GoPlayback(MOurNode, t.CMD_SIGNAL_WAIT)
+	} else if !nextState.playWait && MWait {
 		ac.TpLogWarn("Play Wait terminate")
 		MWait = false
 	}
@@ -665,7 +667,7 @@ func GoPlayback(node int, whatCmd byte) {
 
 		}
 
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(500 * time.Millisecond)
 	}
 }
 
