@@ -7,28 +7,49 @@ import fileinput
 import re
 import os
 
-# use the next line if you use /WS client connections
-# remember to set WSNADDR for the client and to add a WSL to the 
-# ubbconfig
-
-# from endurox.atmiws import *
+import RPi.GPIO as GPIO
+import time
+GPIO.setmode(GPIO.BCM)
 
 from endurox.atmi import *
 from endurox.ubfbuffer import *
 
 
+GPIO.setup(4, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
+presses = 1
+
 svc = "PHONE%02d" % (tpgetnodeid())
 
-tplog(log_debug, "Doing %s call " % svc)
+#
+# Send the event to phone service
+#
+def my_callback(channel):
+	global presses
+	print "callback called " + str(presses) + " times"
 
-inp = UbfBuffer()
-inp['A_SRC_NODE'][0] = tpgetnodeid()
-inp['A_CMD'][0] = "P"
+	
+	Cmd = ""
+	if GPIO.input(4):
+		print "RISING"
+		Cmd = "P"
+	else:
+		Cmd = "H"
 
-print inp
+	inp = UbfBuffer()
+	inp['A_SRC_NODE'][0] = "%d" % tpgetnodeid()
+	inp['A_CMD'][0] = Cmd
+	print inp
+	res =  tpcall(svc, inp.as_dictionary(), TPNOTRAN)
+	print res
+	presses += 1
 
-res =  tpcall(svc, inp.as_dictionary(), TPNOTRAN)
+GPIO.add_event_detect(4, GPIO.BOTH, callback=my_callback, bouncetime=100)
 
-print res
-
+print "Waiting"
+while True:
+	try:
+		time.sleep(5)
+	except KeyboardInterrupt:
+        	GPIO.cleanup()
+        break
 

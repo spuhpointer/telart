@@ -27,7 +27,7 @@ class server:
 
 		try:
 			while 1:
-				evt, rec = tprecv(handle
+				evt, rec = tprecv(handle)
 		      
 				# Having some issues with data buffer
 				# the rec needs to be converted to UBF...
