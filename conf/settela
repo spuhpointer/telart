@@ -2,6 +2,12 @@
 #
 # @(#) Load this script in environment
 #
+
+# Generate dynamic configuration...
+./nodecfg.pl >dynconf
+chmod +x dynconf
+source ./dynconf
+
 export NDRX_APPHOME=/home/mvitolin/projects/telart
 export NDRX_CCONFIG=$NDRX_APPHOME/conf
 export PATH=$PATH:$NDRX_APPHOME/bin

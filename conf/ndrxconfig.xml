@@ -90,6 +90,11 @@
 		-->
 		<killtime>1</killtime>
 		
+		<!--
+			Blacklist the client process monitor & config server
+			to not to share them in cluster..
+		-->
+		<blacklistsvcs>@CCONF,@CPMSVC</blacklistsvcs>
 	</defaults>
 	<servers>
 		<server name="cconfsrv">
@@ -98,13 +103,71 @@
 			<srvid>1</srvid>
 			<sysopt>-e ${NDRX_APPHOME}/log/cconfsrv.log -r</sysopt>
 		</server>
+		<!-- Dynamic cluster links to all other devices... -->
 		<server name="tpbridge">
 			<min>1</min>
-			<max>1</max>
-			<srvid>150</srvid>
-			<sysopt>-e ${NDRX_APPHOME}/log/tpbridge_13.log -r</sysopt>
-			<appopt>-f -n13 -r -i 0.0.0.0 -p 21003 -tA -z30</appopt>
+			<max>${A_BRI_1_MIN}</max>
+			<srvid>101</srvid>
+			<sysopt>${A_BRI_1_SYSOPT}</sysopt>
+			<appopt>${A_BRI_1_APPOPT}</appopt>
 		</server>
+		<server name="tpbridge">
+			<min>1</min>
+			<max>${A_BRI_2_MIN}</max>
+			<srvid>102</srvid>
+			<sysopt>${A_BRI_2_SYSOPT}</sysopt>
+			<appopt>${A_BRI_2_APPOPT}</appopt>
+		</server>
+		<server name="tpbridge">
+			<min>1</min>
+			<max>${A_BRI_3_MIN}</max>
+			<srvid>103</srvid>
+			<sysopt>${A_BRI_3_SYSOPT}</sysopt>
+			<appopt>${A_BRI_3_APPOPT}</appopt>
+		</server>
+		<server name="tpbridge">
+			<min>1</min>
+			<max>${A_BRI_4_MIN}</max>
+			<srvid>104</srvid>
+			<sysopt>${A_BRI_4_SYSOPT}</sysopt>
+			<appopt>${A_BRI_4_APPOPT}</appopt>
+		</server>
+		<server name="tpbridge">
+			<min>1</min>
+			<max>${A_BRI_5_MIN}</max>
+			<srvid>105</srvid>
+			<sysopt>${A_BRI_5_SYSOPT}</sysopt>
+			<appopt>${A_BRI_5_APPOPT}</appopt>
+		</server>
+		<server name="tpbridge">
+			<min>1</min>
+			<max>${A_BRI_6_MIN}</max>
+			<srvid>106</srvid>
+			<sysopt>${A_BRI_6_SYSOPT}</sysopt>
+			<appopt>${A_BRI_6_APPOPT}</appopt>
+		</server>
+		<server name="tpbridge">
+			<min>1</min>
+			<max>${A_BRI_7_MIN}</max>
+			<srvid>107</srvid>
+			<sysopt>${A_BRI_7_SYSOPT}</sysopt>
+			<appopt>${A_BRI_7_APPOPT}</appopt>
+		</server>
+		<server name="tpbridge">
+			<min>1</min>
+			<max>${A_BRI_8_MIN}</max>
+			<srvid>108</srvid>
+			<sysopt>${A_BRI_8_SYSOPT}</sysopt>
+			<appopt>${A_BRI_8_APPOPT}</appopt>
+		</server>
+		<server name="tpbridge">
+			<min>1</min>
+			<max>${A_BRI_9_MIN}</max>
+			<srvid>109</srvid>
+			<sysopt>${A_BRI_9_SYSOPT}</sysopt>
+			<appopt>${A_BRI_9_APPOPT}</appopt>
+		</server>
+		<!-- Our local devices -->
 		<server name="micsv">
 		        <pingtime>0</pingtime>
 			<min>1</min>
@@ -150,21 +213,8 @@
 		Client section 
 	-->
 	<clients>
-		<!--
-			Test parameter passing to process 
-			- To list clients:$ xadmin pc
-			- To stop client: $ xadmin sc -t TAG1 -s SUBSECTION1
-			- To boot client: $ xadmin bc -t TAG1 -s SUBSECTION1
-		-->
-		<client cmdline="your_test_binary.sh -t ${NDRX_CLTTAG} -s ${NDRX_CLTSUBSECT}">
-			<exec tag="TAG1" subsect="SUBSECTION1" autostart="Y" log="${NDRX_APPHOME}/log/testbin-1.log"/>
-			<exec tag="TAG2" subsect="SUBSECTION2" autostart="Y" log="${NDRX_APPHOME}/log/testbin-3.log"/>
-		</client>
-		<client cmdline="your_test_binary2.sh -t ${NDRX_CLTTAG}">
-			<exec tag="TAG3" autostart="Y" log="${NDRX_APPHOME}/log/testbin2-1.log"/>
-		</client>
 		<client cmdline="hupcl.py">
-			<exec tag="HUP" autostart="Y" subsect="" log="${NDRX_APPHOME}/log/HUP"/>
+			<exec tag="HUP" autostart="N" subsect="" log="${NDRX_APPHOME}/log/hupcl.log"/>
 		</client>
 	</clients>
 </endurox>
