@@ -239,7 +239,7 @@ func SendCmd(ac *atmi.ATMICtx, cmd byte, cmdRet *byte) atmi.ATMIError {
 
 	ac.TpLogInfo("Got command back: %c", rune(*cmdRet))
 
-	return nil
+	return atmi.NewCustomATMIError(atmi.TPMINVAL, "Call OK")
 
 }
 
