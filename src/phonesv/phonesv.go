@@ -102,6 +102,8 @@ var Machine = []State{
 		transitions: []Transition{
 			Transition{cmd: t.CMD_TIMEOUT, f: nil, next_state: SAllBusy},
 			Transition{cmd: t.CMD_FOUND, f: nil, next_state: SActivRing},
+			/* If we call our selves..: */
+			Transition{cmd: t.CMD_RING_BELL, f: SetAnswerBusy, next_state: SActivFind},
 		},
 	},
 	State{
