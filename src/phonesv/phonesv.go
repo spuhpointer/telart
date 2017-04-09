@@ -291,7 +291,7 @@ func GoFindFreePhone(_ac *atmi.ATMICtx) atmi.ATMIError {
 
 		if errA.Code() == atmi.TPMINVAL {
 			ac.TpLogInfo("Call ok, command ret: %c", rune(cmdRet))
-			if cmdRet == t.CMD_PICK_THEIR {
+			if cmdRet == t.CMD_LOCK {
 				ac.TpLogInfo("Their accepted incoming call")
 				/* Step the state machine
 				StepStateMachine(ac, t.CMD_FOUND, "GoFindFreePhone()")*/
@@ -582,7 +582,7 @@ next:
 
 	//If state not changed, leave the same timeout..
 	if curState.state != nextState.state {
-	
+
 		MTout = nextState.tout
 		MToutStamp = time.Now().UnixNano()
 
@@ -836,8 +836,13 @@ func PHONE(ac *atmi.ATMICtx, svc *atmi.TPSVCINFO) {
 
 	ret := SUCCEED
 
+	//Get UBF Handler
+	ub, _ := ac.CastToUBF(&svc.Data)
+
 	//Return to the caller
 	defer func() {
+
+		ub.TpLogPrintUBF(atmi.LOG_DEBUG, "Responding to incoming service call with...")
 
 		if SUCCEED == ret {
 			ac.TpReturn(atmi.TPSUCCESS, 0, &svc.Data, 0)
@@ -845,9 +850,6 @@ func PHONE(ac *atmi.ATMICtx, svc *atmi.TPSVCINFO) {
 			ac.TpReturn(atmi.TPFAIL, 0, &svc.Data, 0)
 		}
 	}()
-
-	//Get UBF Handler
-	ub, _ := ac.CastToUBF(&svc.Data)
 
 	//Print the buffer to stdout
 	//fmt.Println("Incoming request:")
