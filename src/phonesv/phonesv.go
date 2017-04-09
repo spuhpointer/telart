@@ -126,7 +126,7 @@ var Machine = []State{
 		},
 	},
 	State{
-		state: SActivConv, voice: false, ring: false, playBusy: false, playWait: false, tout: 600,
+		state: SActivConv, voice: true, ring: false, playBusy: false, playWait: false, tout: 600,
 		transitions: []Transition{
 			Transition{cmd: t.CMD_TIMEOUT, a: SendHUP, next_state: SAllBusy},
 			Transition{cmd: t.CMD_HUP_OUR, a: SendHUP, next_state: SIdle},
