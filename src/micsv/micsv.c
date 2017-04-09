@@ -74,7 +74,8 @@ void MIC (TPSVCINFO *p_svc)
         /* Check the process name in output... */
         while ((rd=read(fileno(fp), buf, sizeof(buf))) > 0)
         {
-                TP_DUMP(log_debug, "Read audio data block", buf, rd);
+                TP_DUMP(6, "Read audio data block", buf, rd);
+                TP_LOG(log_info, "Read audio data block %d", rd);
 		
 		if (NULL==(p_ub=(UBFH *)tprealloc((char *)p_ub, sizeof(buf)+1024)))
 		{
