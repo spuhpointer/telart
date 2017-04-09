@@ -318,6 +318,9 @@ func GoFindFreePhone(_ac *atmi.ATMICtx) atmi.ATMIError {
 				mc.cmd = t.CMD_FOUND
 				mc.source = "GoFindFreePhone() - found..."
 
+				ac.TpLogInfo("Sending CMD_FOUND to statemachine")
+				MMachineCommand<-mc
+
 				return nil
 
 			}
