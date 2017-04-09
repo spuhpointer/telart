@@ -789,10 +789,19 @@ func GoVoice(fromMic int, toPhone int) {
 	cdM, errA := ac.TpConnect(micSvc, buf.GetBuf(),
 		atmi.TPNOTRAN|atmi.TPRECVONLY)
 
+	if errA!= nil {
+		ac.TpLogError("Failed to connect to mic %s: %s", micSvc, errA.Error())
+		return
+	}
+
 	defer ac.TpDiscon(cdM)
 
 	cdP, errA := ac.TpConnect(phoneSvc, buf.GetBuf(),
 		atmi.TPNOTRAN|atmi.TPSENDONLY)
+	if errA!= nil {
+		ac.TpLogError("Failed to connect to earphone %s: %s", phoneSvc, errA.Error())
+		return
+	}
 
 	defer ac.TpDiscon(cdP)
 
@@ -860,6 +869,13 @@ func PHONE(ac *atmi.ATMICtx, svc *atmi.TPSVCINFO) {
 	//Print the buffer to stdout
 	//fmt.Println("Incoming request:")
 	ub.TpLogPrintUBF(atmi.LOG_DEBUG, "Incoming request:")
+
+	/* Echo test... 
+	MVoice = true
+        go GoVoice(MOurNode, MOurNode)
+	return
+	*/
+
 
 	//Add test field to buffer
 	cmd, errB := ub.BGetByte(u.A_CMD, 0)
