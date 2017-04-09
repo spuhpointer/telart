@@ -7,7 +7,7 @@ const (
 	 */
 
 	CMD_HUP_OUR          = 'H' /* our hup phone 			*/
-        CMD_HUP_THEIR        = 'h' /* Their HUP                         */
+	CMD_HUP_THEIR        = 'h' /* Their HUP                         */
 	CMD_PICK_OUR         = 'P' /* pick up phone, our		*/
 	CMD_PICK_THEIR       = 'p' /* pick up, their			*/
 	CMD_SIGNAL_WAIT      = 'W' /* geneate wait signal		*/
@@ -22,5 +22,6 @@ const (
 	CMD_FOUND            = 'F' /* Found target              	*/
 	CMD_SYSERR           = 'R' /* System error occurred            	*/
 	CMD_LOCK             = 'L' /* Locked to this phone...          	*/
+	CMD_EXIT             = 'X' /* System exit          		*/
 
 )

@@ -22,6 +22,7 @@
 #define CMD_TIMEOUT 	        'T' /* Generic Time-out command		*/
 #define CMD_FOUND 	        'F' /* Found target     		*/
 #define CMD_SYSERR 	        'R' /* System error occurred   		*/
+#define CMD_EXIT 	        'X' /* System exit   		        */
 
 /*---------------------------Enums--------------------------------------*/
 /*---------------------------Typedefs-----------------------------------*/

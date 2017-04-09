@@ -84,6 +84,12 @@ type State struct {
 	transitions []Transition
 }
 
+//Work-a-round structure for calling SM from SM transitions
+type MachineCommand struct {
+	cmd    byte /* Command, see t.CMD_ */
+	source string
+}
+
 var Machine = []State{
 	/* Active states: we do the call: */
 	State{
@@ -190,6 +196,8 @@ var MToutStamp int64
 
 var MScheduleNextCmd byte = 0 /* No command at the moment */
 
+var MMachineCommand chan MachineCommand
+
 //Send the command to locked partner
 //@param ac	ATMI Context into which send the command
 //@param cmd	Command out
@@ -253,10 +261,6 @@ func random(min, max int) int {
 	return rand.Intn(max-min) + min
 }
 
-func GoRunFound(ac *atmi.ATMICtx) {
-	StepStateMachine(ac, t.CMD_FOUND, "GoFindFreePhone()")
-}
-
 //Search for free phone
 func GoFindFreePhone(_ac *atmi.ATMICtx) atmi.ATMIError {
 
@@ -288,9 +292,31 @@ func GoFindFreePhone(_ac *atmi.ATMICtx) atmi.ATMIError {
 				ac.TpLogInfo("Their accepted incoming call")
 				/* Step the state machine
 				StepStateMachine(ac, t.CMD_FOUND, "GoFindFreePhone()")*/
-				go GoRunFound(ac)
+				/* We get some:
+				   				go build  -o phonesv *.go
+				   # command-line-arguments
+				   ./phonesv.go:159: initialization loop:
+				   	/home/telart/telart/src/phonesv/phonesv.go:159 Machine refers to
+				   	/home/telart/telart/src/phonesv/phonesv.go:261 GoFindFreePhone refers to
+				   	/home/telart/telart/src/phonesv/phonesv.go:256 GoRunFound refers to
+				   	/home/telart/telart/src/phonesv/phonesv.go:419 StepStateMachine refers to
+				   	/home/telart/telart/src/phonesv/phonesv.go:355 FindState refers to
+				   	/home/telart/telart/src/phonesv/phonesv.go:159 Machine
+				   Makefile:14: recipe for target 'phonesv' failed
+				   make[1]: *** [phonesv] Error 2
+				   make[1]: Leaving directory '/home/telart/telart/src/phonesv'
+				   Makefile:4: recipe for target 'all' failed
+				   make: *** [all]Error 2
+
+				   here... so to get over that we could use some channels for delivery... */
+
+				var mc MachineCommand
+
+				mc.cmd = t.CMD_FOUND
+				mc.source = "GoFindFreePhone() - found..."
+
 				return nil
-				
+
 			}
 		} else {
 			//If not locked, then sleep(500 ms)
@@ -406,6 +432,32 @@ func GoTimeout() {
 		ac.TpLogError("Timeout condition, spent: %d", MTout)
 
 		StepStateMachine(ac, t.CMD_TIMEOUT, "GoTimeout()")
+	}
+}
+
+// Workaround for state machine invocation from transition functions
+func GoMachine() {
+
+	ac, errA := atmi.NewATMICtx()
+
+	if nil != errA {
+		fmt.Fprintf(os.Stderr, "Failed to allocate new context: %s",
+			errA.Message())
+		MSysError = true
+		os.Exit(atmi.FAIL)
+	}
+
+	for true {
+		cmd := <-MMachineCommand
+
+		if cmd.cmd == t.CMD_EXIT {
+			ac.TpLogInfo("Exit command received for GoMachine()...")
+			break
+		} else {
+			ac.TpLogWarn("GoMachine: Forwarding %c/%s",
+				rune(cmd.cmd), cmd.source)
+			StepStateMachine(ac, cmd.cmd, cmd.source)
+		}
 	}
 }
 
@@ -668,7 +720,7 @@ func GoPlayback(node int, whatCmd byte) {
 	for (MBusy || MWait) && curStamp == MPlayuBackStamp {
 
 		ac.TpLogInfo("Sending playback tick... (curstamp=%d, global=%d)",
-				curStamp, MPlayuBackStamp)
+			curStamp, MPlayuBackStamp)
 
 		//Send audio data to playback... data
 		if errA := ac.TpSend(cdP, buf.GetBuf(), 0, &revent); nil != errA {
@@ -824,8 +876,8 @@ func PHONE(ac *atmi.ATMICtx, svc *atmi.TPSVCINFO) {
 		//Accept ring bell...
 		step = true
 		ac.TpLogInfo("Incoming bell ring...")
-	//Accept any messages from our local node.
-	} else if source ==  MOurNode {
+		//Accept any messages from our local node.
+	} else if source == MOurNode {
 		ac.TpLogInfo("Accept any command from local node")
 		step = true
 	} else {
@@ -916,6 +968,12 @@ func Init(ac *atmi.ATMICtx) int {
 	}
 
 	MOurNode = int(ac.TpGetnodeId())
+
+	//Buffered channel
+	MMachineCommand = make(chan MachineCommand, 10)
+
+	go GoMachine()
+
 	//Advertize service
 	if err := ac.TpAdvertise(fmt.Sprintf("PHONE%02d", MOurNode),
 		"PHONE", PHONE); err != nil {
@@ -930,11 +988,16 @@ func Init(ac *atmi.ATMICtx) int {
 //Server shutdown
 //@param ac ATMI Context
 func Uninit(ac *atmi.ATMICtx) {
+
+	var mc MachineCommand
 	ac.TpLogWarn("Server is shutting down...")
 
 	MVoice = false
 
 	//TODO: Generate basic HUP signal...
+
+	mc.cmd = t.CMD_EXIT
+	mc.source = "Server uninit called - terminating"
 }
 
 //Executable main entry point
