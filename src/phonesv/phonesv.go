@@ -166,6 +166,7 @@ var MVoice bool = false
 /* Playback of sounds in our phone */
 var MBusy bool = false
 var MWait bool = false
+var MPlayuBackStamp int64
 
 /* Do the ring */
 
@@ -439,7 +440,7 @@ next:
 	if nil != curTran.f {
 		ac.TpLogInfo("Executing f1")
 		err := curTran.f(ac)
-		if err!=nil {
+		if err != nil {
 			ac.TpLogInfo("Got error from transition: [%s] - ignore.", err.Error())
 		}
 	}
@@ -609,7 +610,7 @@ func GoRing(node int) {
 func GoPlayback(node int, whatCmd byte) {
 
 	var revent int64
-
+	var curStamp int64
 	playBackSvc := fmt.Sprintf("PLAYBACK%02d", node)
 
 	ret := SUCCEED
@@ -653,10 +654,13 @@ func GoPlayback(node int, whatCmd byte) {
 	//Possible causes segementation faul!!!
 	defer ac.TpDiscon(cdP)
 
-	//Establish connection
-	for MBusy || MWait {
+	curStamp = time.Now().UnixNano()
+	MPlayuBackStamp = curStamp
 
-		buf.TpLogPrintUBF(atmi.LOG_DEBUG, "Sending playback clock...")
+	//Establish connection
+	for (MBusy || MWait) && curStamp == MPlayuBackStamp {
+
+		buf.TpLogPrintUBF(atmi.LOG_DEBUG, "Sending playback tick...")
 
 		//Send audio data to playback... data
 		if errA := ac.TpSend(cdP, buf.GetBuf(), 0, &revent); nil != errA {
