@@ -237,6 +237,8 @@ func SendCmd(ac *atmi.ATMICtx, cmd byte, cmdRet *byte) atmi.ATMIError {
 
 	ac.TpLogInfo("Calling phone: [%s]", svc)
 
+	buf.TpLogPrintUBF(atmi.LOG_INFO, "Sending data")
+
 	if _, err := ac.TpCall(svc, buf, 0); nil != err {
 		ac.TpLogError("ATMI Error %d:[%s]", err.Code(), err.Message())
 		return err
@@ -319,7 +321,7 @@ func GoFindFreePhone(_ac *atmi.ATMICtx) atmi.ATMIError {
 				mc.source = "GoFindFreePhone() - found..."
 
 				ac.TpLogInfo("Sending CMD_FOUND to statemachine")
-				MMachineCommand<-mc
+				MMachineCommand <- mc
 
 				return nil
 
@@ -891,6 +893,9 @@ func PHONE(ac *atmi.ATMICtx, svc *atmi.TPSVCINFO) {
 		//Accept any messages from our local node.
 	} else if source == MOurNode {
 		ac.TpLogInfo("Accept any command from local node")
+		step = true
+	} else if source == MTheirNode {
+		ac.TpLogInfo("Data from their node - accept")
 		step = true
 	} else {
 		ac.TpLogInfo("Dropping the command - not expected")
