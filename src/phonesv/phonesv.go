@@ -493,6 +493,7 @@ next:
 	if nextState.playBusy && !MBusy {
 		ac.TpLogWarn("Play Busy start")
 		MBusy = true
+		MWait = false
 		go GoPlayback(MOurNode, t.CMD_SIGNAL_BUSY)
 	} else if !nextState.playBusy && MBusy {
 		ac.TpLogWarn("Play Busy terminate")
@@ -503,6 +504,7 @@ next:
 	if nextState.playWait && !MWait {
 		ac.TpLogWarn("Play Wait start")
 		MWait = true
+		MBusy = false
 		go GoPlayback(MOurNode, t.CMD_SIGNAL_WAIT)
 	} else if !nextState.playWait && MWait {
 		ac.TpLogWarn("Play Wait terminate")
@@ -624,7 +626,7 @@ func GoPlayback(node int, whatCmd byte) {
 	//Return to the caller
 	defer func() {
 
-		ac.TpLogError("Voice terminates with  %d", ret)
+		ac.TpLogError("Playback terminates with  %d", ret)
 		MBusy = false
 		MWait = false
 	}()
