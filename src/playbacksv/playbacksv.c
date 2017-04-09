@@ -169,9 +169,12 @@ void PLAYBACK (TPSVCINFO *p_svc)
 		while ((sigc=wait3(&stat_loc, WNOHANG|WUNTRACED, &rusage)) > 0)
 		{
 			TP_LOG(log_info, "Got SIGCHLD...")
-			was_sig = 1;
 			if (sigc == child_pid)
 			{
+				/* Only if it was last child...
+				 * We can receive some leftovers from previous requests
+				 */
+				was_sig = 1;
 				child_pid=0;
 			}
 		}

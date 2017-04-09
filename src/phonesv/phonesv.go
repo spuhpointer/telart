@@ -104,6 +104,8 @@ var Machine = []State{
 			Transition{cmd: t.CMD_FOUND, f: nil, next_state: SActivRing},
 			/* If we call our selves..: */
 			Transition{cmd: t.CMD_RING_BELL, f: SetAnswerBusy, next_state: SActivFind},
+			/* Send up if ring enqueued .... */
+			Transition{cmd: t.CMD_HUP_OUR, f: nil, a: SendHUP, next_state: SIdle},
 		},
 	},
 	State{
@@ -251,10 +253,12 @@ func random(min, max int) int {
 	return rand.Intn(max-min) + min
 }
 
+func GoRunFound(ac *atmi.ATMICtx) {
+	StepStateMachine(ac, t.CMD_FOUND, "GoFindFreePhone()")
+}
+
 //Search for free phone
 func GoFindFreePhone(_ac *atmi.ATMICtx) atmi.ATMIError {
-
-	var w StopWatch
 
 	ac, errA := atmi.NewATMICtx()
 
@@ -266,9 +270,9 @@ func GoFindFreePhone(_ac *atmi.ATMICtx) atmi.ATMIError {
 	}
 
 	MTheirNode = 0
-	w.Reset()
 
-	for w.GetDetlaSec() < ConstFindPhoneTime {
+	/* for w.GetDetlaSec() < ConstFindPhoneTime { */
+	for MState == SActivFind { /* while we are in active find state */
 		//Get random host
 		MTheirNode = random(MMinNode, MMaxNode)
 
@@ -282,6 +286,11 @@ func GoFindFreePhone(_ac *atmi.ATMICtx) atmi.ATMIError {
 			ac.TpLogInfo("Call ok, command ret: %c", rune(cmdRet))
 			if cmdRet == t.CMD_PICK_THEIR {
 				ac.TpLogInfo("Their accepted incoming call")
+				/* Step the state machine
+				StepStateMachine(ac, t.CMD_FOUND, "GoFindFreePhone()")*/
+				go GoRunFound(ac)
+				return nil
+				
 			}
 		} else {
 			//If not locked, then sleep(500 ms)
@@ -290,12 +299,7 @@ func GoFindFreePhone(_ac *atmi.ATMICtx) atmi.ATMIError {
 		}
 	}
 
-	//Generate timeout...
-	if MTheirNode > 0 {
-		MScheduleNextCmd = t.CMD_TIMEOUT
-	} else {
-		MScheduleNextCmd = t.CMD_PICK_THEIR
-	}
+	MTheirNode = 0
 
 	return nil
 }
@@ -401,7 +405,7 @@ func GoTimeout() {
 
 		ac.TpLogError("Timeout condition, spent: %d", MTout)
 
-		StepStateMachine(ac, t.CMD_TIMEOUT)
+		StepStateMachine(ac, t.CMD_TIMEOUT, "GoTimeout()")
 	}
 }
 
@@ -412,8 +416,10 @@ func GoTimeout() {
 //If state is switched then timeout command must be ignored as it entered in
 //race condion.
 //@param cmd 	Command to run
-func StepStateMachine(ac *atmi.ATMICtx, cmd byte) {
+func StepStateMachine(ac *atmi.ATMICtx, cmd byte, source string) {
+	ac.TpLogInfo("Waiting on Machine. cmd: %c, Source: %s", rune(cmd), source)
 	MachineLock.Lock()
+	ac.TpLogInfo("Locked info machine Machine. cmd: %c, Source: %s", rune(cmd), source)
 
 next:
 	ac.TpLogInfo("Current state: [%s], got command: %c", MState, rune(cmd))
@@ -436,6 +442,18 @@ next:
 
 	ac.TpLogInfo("Executing transition, next state: [%s]", curTran.next_state)
 
+	/* Switch next state... */
+	nextState := FindState(curTran.next_state)
+	if nil == nextState {
+		ac.TpLog(atmi.LOG_ERROR, "ERROR ! Next state not found: %s", curTran.next_state)
+		/* Should be picked up by periodic scan and terminate the server */
+		MSysError = true
+		return
+	}
+
+	/* Switch state now... */
+	MState = nextState.state
+
 	/* execute transisions... */
 	if nil != curTran.f {
 		ac.TpLogInfo("Executing f1")
@@ -450,25 +468,18 @@ next:
 		go curTran.a(ac)
 	}
 
-	/* Switch next state... */
-	nextState := FindState(curTran.next_state)
-	if nil == nextState {
-		ac.TpLog(atmi.LOG_ERROR, "ERROR ! Next state not found: %s", curTran.next_state)
-		/* Should be picked up by periodic scan and terminate the server */
-		MSysError = true
-		return
-	}
-
 	/* compare the state data... */
 
-	ac.TpLog(atmi.LOG_INFO, "TRAN: State: %s (cur: %s) voice: %t ring: %t "+
+	ac.TpLog(atmi.LOG_INFO, "CUR: State: %s voice: %t ring: %t busy: %t "+
+		"wait: %t tout: %d (stamp: %d)",
+		curState.state, curState.voice, curState.ring, curState.playBusy,
+		curState.playWait, curState.tout, MToutStamp)
+
+	ac.TpLog(atmi.LOG_INFO, "NEW: State: %s (cur: %s) voice: %t ring: %t "+
 		"busy: %t wait: %t tout: %d",
 		nextState.state, MState,
 		nextState.voice, nextState.ring, nextState.playBusy,
 		nextState.playWait, nextState.tout)
-	ac.TpLog(atmi.LOG_INFO, "CUR: State: %s voice: %t ring: %t busy: %t "+
-		"wait: %t tout: %d (stamp: %d)",
-		MState, MVoice, MRing, MBusy, MWait, MTout, MToutStamp)
 
 	/* Process voice block: */
 	if nextState.voice && !MVoice {
@@ -512,9 +523,7 @@ next:
 		MWait = false
 	}
 
-	/* Finally switch the state */
-
-	MState = nextState.state
+	/* Set the timeout (if have one) */
 
 	MTout = nextState.tout
 	MToutStamp = time.Now().UnixNano()
@@ -532,6 +541,7 @@ next:
 	}
 
 	MachineLock.Unlock()
+	ac.TpLogInfo("Machine unlocked. cmd: %c, Source: %s", rune(cmd), source)
 }
 
 //Ring the bell
@@ -594,7 +604,7 @@ func GoRing(node int) {
 				errA.Message())
 
 			//Send hup from their side
-			StepStateMachine(ac, t.CMD_HUP_OUR)
+			StepStateMachine(ac, t.CMD_HUP_OUR, "GoRing()")
 
 			ret = FAIL
 			return
@@ -615,6 +625,9 @@ func GoPlayback(node int, whatCmd byte) {
 
 	ret := SUCCEED
 
+	curStamp = time.Now().UnixNano()
+	MPlayuBackStamp = curStamp
+
 	ac, errA := atmi.NewATMICtx()
 
 	if nil != errA {
@@ -626,10 +639,7 @@ func GoPlayback(node int, whatCmd byte) {
 
 	//Return to the caller
 	defer func() {
-
 		ac.TpLogError("Playback terminates with  %d", ret)
-		MBusy = false
-		MWait = false
 	}()
 
 	//Allocate configuration buffer
@@ -654,13 +664,11 @@ func GoPlayback(node int, whatCmd byte) {
 	//Possible causes segementation faul!!!
 	defer ac.TpDiscon(cdP)
 
-	curStamp = time.Now().UnixNano()
-	MPlayuBackStamp = curStamp
-
 	//Establish connection
 	for (MBusy || MWait) && curStamp == MPlayuBackStamp {
 
-		buf.TpLogPrintUBF(atmi.LOG_DEBUG, "Sending playback tick...")
+		ac.TpLogInfo("Sending playback tick... (curstamp=%d, global=%d)",
+				curStamp, MPlayuBackStamp)
 
 		//Send audio data to playback... data
 		if errA := ac.TpSend(cdP, buf.GetBuf(), 0, &revent); nil != errA {
@@ -675,6 +683,7 @@ func GoPlayback(node int, whatCmd byte) {
 
 		time.Sleep(500 * time.Millisecond)
 	}
+	ac.TpLogError("Playback normal exit after disco.. %d", ret)
 }
 
 //Redirec the voice from MIC to PHONE
@@ -702,7 +711,7 @@ func GoVoice(fromMic int, toPhone int) {
 		ac.TpLogError("Voice terminates with  %d", ret)
 
 		if SUCCEED != ret {
-			StepStateMachine(ac, t.CMD_SYSERR)
+			StepStateMachine(ac, t.CMD_SYSERR, "GoVoice()")
 		}
 	}()
 
@@ -749,7 +758,7 @@ func GoVoice(fromMic int, toPhone int) {
 				errA.Message(), revent)
 
 			//Extra insurance...
-			StepStateMachine(ac, t.CMD_HUP_THEIR)
+			StepStateMachine(ac, t.CMD_HUP_THEIR, "GoVoice()")
 			if revent != atmi.TPEV_DISCONIMM {
 				ret = FAIL
 			}
@@ -815,11 +824,17 @@ func PHONE(ac *atmi.ATMICtx, svc *atmi.TPSVCINFO) {
 		//Accept ring bell...
 		step = true
 		ac.TpLogInfo("Incoming bell ring...")
+	//Accept any messages from our local node.
+	} else if source ==  MOurNode {
+		ac.TpLogInfo("Accept any command from local node")
+		step = true
+	} else {
+		ac.TpLogInfo("Dropping the command - not expected")
 	}
 
 	if step {
 		ac.TpLogInfo("Stepping the state machine...")
-		StepStateMachine(ac, cmd)
+		StepStateMachine(ac, cmd, "PHONE service entry")
 	}
 
 	/* check the response command... */

@@ -31,9 +31,9 @@ def my_callback(channel):
 	Cmd = ""
 	if GPIO.input(2):
 		print "RISING"
-		Cmd = "P"
-	else:
 		Cmd = "H"
+	else:
+		Cmd = "P"
 
 	inp = UbfBuffer()
 	inp['A_SRC_NODE'][0] = "%d" % tpgetnodeid()
@@ -43,12 +43,12 @@ def my_callback(channel):
 	print res
 	presses += 1
 
-GPIO.add_event_detect(2, GPIO.BOTH, callback=my_callback, bouncetime=100)
+GPIO.add_event_detect(2, GPIO.BOTH, callback=my_callback, bouncetime=500)
 
 # reset channel..
 my_callback(1)
 
-print "Waiting"
+tplog(log_info, "Waiting")
 while True:
 	try:
 		time.sleep(5)
