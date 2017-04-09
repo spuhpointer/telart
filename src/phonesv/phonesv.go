@@ -257,7 +257,6 @@ func SendCmd(ac *atmi.ATMICtx, cmd byte, cmdRet *byte) atmi.ATMIError {
 }
 
 func random(min, max int) int {
-	rand.Seed(time.Now().Unix())
 	return rand.Intn(max-min) + min
 }
 
@@ -277,8 +276,12 @@ func GoFindFreePhone(_ac *atmi.ATMICtx) atmi.ATMIError {
 
 	/* for w.GetDetlaSec() < ConstFindPhoneTime { */
 	for MState == SActivFind { /* while we are in active find state */
+
 		//Get random host
 		MTheirNode = random(MMinNode, MMaxNode)
+		if MTheirNode == MOurNode {
+			continue
+		}
 
 		ac.TpLogInfo("Trying to call to: %d", MTheirNode)
 		//Try to access it
@@ -577,19 +580,23 @@ next:
 
 	/* Set the timeout (if have one) */
 
-	MTout = nextState.tout
-	MToutStamp = time.Now().UnixNano()
+	//If state not changed, leave the same timeout..
+	if curState.state != nextState.state {
+	
+		MTout = nextState.tout
+		MToutStamp = time.Now().UnixNano()
 
-	if nextState.tout > 0 {
-		ac.TpLogInfo("Setting timeout to: %d", nextState.tout)
+		if nextState.tout > 0 {
+			ac.TpLogInfo("Setting timeout to: %d", nextState.tout)
 
-		go GoTimeout()
-	}
+			go GoTimeout()
+		}
 
-	if MScheduleNextCmd > 0 {
-		cmd = MScheduleNextCmd
-		MScheduleNextCmd = 0
-		goto next
+		if MScheduleNextCmd > 0 {
+			cmd = MScheduleNextCmd
+			MScheduleNextCmd = 0
+			goto next
+		}
 	}
 
 	MachineLock.Unlock()
@@ -971,6 +978,9 @@ func Init(ac *atmi.ATMICtx) int {
 
 	//Buffered channel
 	MMachineCommand = make(chan MachineCommand, 10)
+
+	//Init random engine
+	rand.Seed(time.Now().Unix())
 
 	go GoMachine()
 
