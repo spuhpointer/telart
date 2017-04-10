@@ -75,7 +75,7 @@ void MIC (TPSVCINFO *p_svc)
         while ((rd=read(fileno(fp), buf, sizeof(buf))) > 0)
         {
                 TP_DUMP(6, "Read audio data block", buf, rd);
-                TP_LOG(log_info, "Read audio data block %d", rd);
+                TP_LOG(log_debug, "Read audio data block %d", rd);
 		
 		if (NULL==(p_ub=(UBFH *)tprealloc((char *)p_ub, sizeof(buf)+1024)))
 		{
@@ -95,7 +95,10 @@ void MIC (TPSVCINFO *p_svc)
 			goto out;
 		}
 		
-		if (SUCCEED!=tpsend(p_svc->cd, (char *)p_ub, 0, TPNOBLOCK, &revent))
+		/* hmm run in block mode, so that if system is full we wait a bit
+		 * maybe audio will get some lag, but who cares
+		 */
+		if (SUCCEED!=tpsend(p_svc->cd, (char *)p_ub, 0, /*TPNOBLOCK*/ 0, &revent))
 		{
 			TP_LOG(log_error, "tpsend failed: %s", tpstrerror(tperrno));
 			if (revent!=0)
@@ -118,7 +121,7 @@ void MIC (TPSVCINFO *p_svc)
 			goto out;
 		}
 		
-		TP_LOG(log_info, "Packet delivered ok");
+		TP_LOG(log_debug, "Packet delivered ok");
         }
         
 out:

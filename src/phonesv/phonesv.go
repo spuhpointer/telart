@@ -823,7 +823,7 @@ func GoVoice(fromMic int, toPhone int) {
 		}
 
 		//buf.TpLogPrintUBF(atmi.LOG_DEBUG, "Transfering")
-		ac.TpLogInfo("Transfering audio packet...")
+		ac.TpLog(6, "Transfering audio packet...")
 
 		//Send audio data to playback... data
 		if errA := ac.TpSend(cdP, buf.GetBuf(), 0, &revent); nil != errA {

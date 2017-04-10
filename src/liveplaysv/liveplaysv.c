@@ -150,7 +150,7 @@ void LIVEPLAY (TPSVCINFO *p_svc)
 			goto out;
 		}
 		
-		TP_LOG(log_info, "Sending audio block, len: %d", rd);
+		TP_LOG(log_debug, "Sending audio block, len: %d", rd);
                 TP_DUMP(6, "Recevied audio block", buf, rd);
 		
 		if (FAIL==write(child_stdin_pipe[1], buf, rd))
