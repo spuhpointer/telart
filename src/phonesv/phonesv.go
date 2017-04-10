@@ -159,7 +159,7 @@ var Machine = []State{
 		transitions: []Transition{
 			Transition{cmd: t.CMD_TIMEOUT, f: SendHUP, next_state: SAllBusy},
 			Transition{cmd: t.CMD_HUP_OUR, f: SendHUP, next_state: SIdle},
-			Transition{cmd: t.CMD_HUP_THEIR, f: nil, next_state: SIdle},
+			Transition{cmd: t.CMD_HUP_THEIR, f: nil, next_state: SAllBusy},
 		},
 	},
 }
