@@ -15,7 +15,9 @@ from endurox.atmi import *
 from endurox.ubfbuffer import *
 
 
-GPIO.setup(2, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
+INPUT_PIN = 2
+
+GPIO.setup(INPUT_PIN, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
 presses = 1
 
 svc = "PHONE%02d" % (tpgetnodeid())
@@ -23,35 +25,48 @@ svc = "PHONE%02d" % (tpgetnodeid())
 #
 # Send the event to phone service
 #
-def my_callback(channel):
+def call(Cmd):
 	global presses
-	print "callback called " + str(presses) + " times"
 
-	
-	Cmd = ""
-	if GPIO.input(2):
-		print "RISING"
-		Cmd = "H"
-	else:
-		Cmd = "P"
-
+	tplog(log_info, "Calling %s with command: %s " % (Cmd, svc))
 	inp = UbfBuffer()
 	inp['A_SRC_NODE'][0] = "%d" % tpgetnodeid()
 	inp['A_CMD'][0] = "%s" % Cmd
 	print inp
 	res =  tpcall(svc, inp.as_dictionary(), TPNOTRAN)
 	print res
-	presses += 1
 
-GPIO.add_event_detect(2, GPIO.BOTH, callback=my_callback, bouncetime=500)
+#GPIO.add_event_detect(INPUT_PIN, GPIO.BOTH)
 
 # reset channel..
-my_callback(1)
+#my_callback(1)
 
-tplog(log_info, "Waiting")
+tplog(log_info, "Starting to scan...")
+currentCmd = ""
+lastVal = GPIO.input(INPUT_PIN)
+tplog(log_info, "last val = %s"%lastVal)
+same = 0
 while True:
+	
 	try:
-		time.sleep(5)
+		# Software deboucner
+		# 500ms needs to be same signal, if so
+		# then issue the command
+		time.sleep(0.1)
+
+		if lastVal == GPIO.input(INPUT_PIN):
+			same+=1
+		else:
+			lastVal = GPIO.input(INPUT_PIN)
+			same = 0
+
+		if same > 8 and lastVal==True and currentCmd!="H":
+			currentCmd="H"
+			call(currentCmd)
+		elif same > 8 and lastVal==False and currentCmd!="P":
+			currentCmd="P"
+			call(currentCmd)
+			
 	except KeyboardInterrupt:
         	GPIO.cleanup()
 
