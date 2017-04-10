@@ -479,7 +479,14 @@ func GoMachine() {
 func StepStateMachine(ac *atmi.ATMICtx, cmd byte, source string) {
 	ac.TpLogInfo("Waiting on Machine. cmd: %c, Source: %s", rune(cmd), source)
 	MachineLock.Lock()
-	ac.TpLogInfo("Locked info machine Machine. cmd: %c, Source: %s", rune(cmd), source)
+	ac.TpLogInfo("MACHINE LOCKED. cmd: %c, Source: %s", rune(cmd), source)
+
+        //Return to the caller
+        defer func() {
+		MachineLock.Unlock()
+		ac.TpLogInfo("MACHINE UNLOCKED. cmd: %c, Source: %s", rune(cmd), source)
+        }()
+
 
 next:
 	ac.TpLogInfo("Current state: [%s], got command: %c", MState, rune(cmd))
@@ -604,8 +611,7 @@ next:
 		}
 	}
 
-	MachineLock.Unlock()
-	ac.TpLogInfo("Machine unlocked. cmd: %c, Source: %s", rune(cmd), source)
+	ac.TpLogInfo("Machine Stepped ok")
 }
 
 //Ring the bell
@@ -813,6 +819,12 @@ func GoVoice(fromMic int, toPhone int) {
 
 			ac.TpLogError("Failed to receive mic data: %s (%d)",
 				errA.Message(), revent)
+
+			//Extra insurance...
+			StepStateMachine(ac, t.CMD_HUP_THEIR, "GoVoice()")
+			if revent != atmi.TPEV_DISCONIMM {
+				ret = FAIL
+			}
 
 			if revent != atmi.TPEV_DISCONIMM {
 				ret = FAIL
