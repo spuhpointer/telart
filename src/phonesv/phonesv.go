@@ -118,7 +118,7 @@ var Machine = []State{
 		/* ring their */
 		state: SActivRing, voice: false, ring: true, playBusy: false, playWait: true, tout: ConstFindPhoneTime,
 		transitions: []Transition{
-			Transition{cmd: t.CMD_TIMEOUT, f: nil, next_state: SAllBusy},
+			Transition{cmd: t.CMD_TIMEOUT, f: SendHUP, next_state: SAllBusy},
 			/* they send us establish... */
 			Transition{cmd: t.CMD_PICK_THEIR, f: nil, next_state: SActivConv},
 			Transition{cmd: t.CMD_HUP_OUR, a: SendHUP, next_state: SIdle},
@@ -146,7 +146,7 @@ var Machine = []State{
 	 * The other node is generating ring...
 	 */
 	State{
-		state: SPasivRing, voice: false, ring: false, playBusy: false, playWait: false, tout: 90,
+		state: SPasivRing, voice: false, ring: false, playBusy: false, playWait: false, tout: ConstFindPhoneTime,
 		transitions: []Transition{
 			Transition{cmd: t.CMD_TIMEOUT, f: SendTimeOut, next_state: SIdle},
 			Transition{cmd: t.CMD_PICK_OUR, f: SendPick, next_state: SPasivConv},
