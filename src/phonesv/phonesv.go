@@ -599,6 +599,7 @@ next:
 	} else {
                 /* diagnostic code */
                 if cmd == t.CMD_DIAG_RING {
+			MRing=true		
                         go GoRing(MOurNode);
                 }
         }
@@ -653,6 +654,8 @@ func GoRing(node int) {
 		os.Exit(atmi.FAIL)
 	}
 
+	ac.TpLogDebug("Ringing servcie %s", bellSvc)
+
 	//Return to the caller
 	defer func() {
 
@@ -701,7 +704,7 @@ func GoRing(node int) {
 
 		}
 
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(1000 * time.Millisecond)
 	}
 }
 
