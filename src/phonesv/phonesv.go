@@ -938,10 +938,12 @@ func PHONE(ac *atmi.ATMICtx, svc *atmi.TPSVCINFO) {
 
 	//At idle we allow all nodes to enter..
 	MTheirNodeLast = source
+        /* Really, I guess only incoming bell.. allow at any state
 	if MState == SIdle {
 		step = true
 		ac.TpLogInfo("We are at idle, allow any command...")
-	} else if cmd == t.CMD_RING_BELL {
+	} else */
+        if cmd == t.CMD_RING_BELL {
 		//Accept ring bell...
 		step = true
 		ac.TpLogInfo("Incoming bell ring...")
