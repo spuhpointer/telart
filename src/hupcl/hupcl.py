@@ -60,10 +60,10 @@ while True:
 			lastVal = GPIO.input(INPUT_PIN)
 			same = 0
 
-		if same > 8 and lastVal==True and currentCmd!="H":
+		if same > 3 and lastVal==True and currentCmd!="H":
 			currentCmd="H"
 			call(currentCmd)
-		elif same > 8 and lastVal==False and currentCmd!="P":
+		elif same > 3 and lastVal==False and currentCmd!="P":
 			currentCmd="P"
 			call(currentCmd)
 			
