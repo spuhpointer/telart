@@ -121,6 +121,8 @@ var Machine = []State{
 		state: SActivRing, voice: false, ring: true, playBusy: false, playWait: true, tout: ConstFindPhoneTime,
 		transitions: []Transition{
 			Transition{cmd: t.CMD_TIMEOUT, f: SendHUP, next_state: SAllBusy},
+			/* This could be bad ring on their side, thus let them know... */
+			Transition{cmd: t.CMD_HUP_THEIR, f: SendHUP, next_state: SAllBusy},
 			/* they send us establish... */
 			Transition{cmd: t.CMD_PICK_THEIR, f: nil, next_state: SActivConv},
 			Transition{cmd: t.CMD_HUP_OUR, a: SendHUP, next_state: SIdle},
