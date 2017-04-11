@@ -1,0 +1,11 @@
+#!/bin/bash
+
+#
+# #(@)  Master startup script
+#
+
+pushd .
+cd /home/telart/telart/conf
+. settela
+xadmin start -y
+popd
