@@ -103,7 +103,6 @@ var Machine = []State{
 			Transition{cmd: t.CMD_RING_BELL, f: SetLockToPartner, next_state: SPasivRing},
 			Transition{cmd: t.CMD_DIAG_RING, next_state: SIdle},
 			Transition{cmd: t.CMD_DIAG_RINGOFF, a: DiagRingLocalOff, next_state: SIdle},
-			
 		},
 	},
 	State{
@@ -484,12 +483,11 @@ func StepStateMachine(ac *atmi.ATMICtx, cmd byte, source string) {
 	MachineLock.Lock()
 	ac.TpLogInfo("MACHINE LOCKED. cmd: %c, Source: %s", rune(cmd), source)
 
-        //Return to the caller
-        defer func() {
+	//Return to the caller
+	defer func() {
 		MachineLock.Unlock()
 		ac.TpLogInfo("MACHINE UNLOCKED. cmd: %c, Source: %s", rune(cmd), source)
-        }()
-
+	}()
 
 next:
 	ac.TpLogInfo("Current state: [%s], got command: %c", MState, rune(cmd))
@@ -597,12 +595,12 @@ next:
 			MWait = false
 		}
 	} else {
-                /* diagnostic code */
-                if cmd == t.CMD_DIAG_RING {
-			MRing=true		
-                        go GoRing(MOurNode);
-                }
-        }
+		/* diagnostic code */
+		if cmd == t.CMD_DIAG_RING {
+			MRing = true
+			go GoRing(MOurNode)
+		}
+	}
 
 	/* Set the timeout (if have one) */
 
@@ -634,13 +632,12 @@ func DiagRingLocalOff(ac *atmi.ATMICtx) atmi.ATMIError {
 	return nil
 }
 
-
 //Ring the bell
 //@param
 func GoRing(node int) {
 
 	var revent int64
-
+	var watch StopWatch
 	bellSvc := fmt.Sprintf("RING%02d", node)
 
 	ret := SUCCEED
@@ -686,25 +683,30 @@ func GoRing(node int) {
 	defer ac.TpDiscon(cdP)
 
 	//Establish connection
+
+	watch.Reset()
 	for MRing {
 
-		buf.TpLogPrintUBF(atmi.LOG_DEBUG, "Sending ring tick...")
+		if watch.GetDetlaSec() > 1 {
+			watch.Reset()
+			buf.TpLogPrintUBF(atmi.LOG_DEBUG, "Sending ring tick...")
 
-		//Send audio data to playback... data
-		if errA := ac.TpSend(cdP, buf.GetBuf(), 0, &revent); nil != errA {
+			//Send audio data to playback... data
+			if errA := ac.TpSend(cdP, buf.GetBuf(), 0, &revent); nil != errA {
 
-			ac.TpLogError("Failed to send sound data: %s",
-				errA.Message())
+				ac.TpLogError("Failed to send sound data: %s",
+					errA.Message())
 
-			//Send hup from their side
-			StepStateMachine(ac, t.CMD_HUP_THEIR, "GoRing()")
+				//Send hup from their side
+				StepStateMachine(ac, t.CMD_HUP_THEIR, "GoRing()")
 
-			ret = FAIL
-			return
+				ret = FAIL
+				return
 
+			}
 		}
 
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 	}
 }
 
@@ -818,7 +820,7 @@ func GoVoice(fromMic int, toPhone int) {
 	cdM, errA := ac.TpConnect(micSvc, buf.GetBuf(),
 		atmi.TPNOTRAN|atmi.TPRECVONLY)
 
-	if errA!= nil {
+	if errA != nil {
 		ac.TpLogError("Failed to connect to mic %s: %s", micSvc, errA.Error())
 		return
 	}
@@ -827,7 +829,7 @@ func GoVoice(fromMic int, toPhone int) {
 
 	cdP, errA := ac.TpConnect(phoneSvc, buf.GetBuf(),
 		atmi.TPNOTRAN|atmi.TPSENDONLY)
-	if errA!= nil {
+	if errA != nil {
 		ac.TpLogError("Failed to connect to earphone %s: %s", phoneSvc, errA.Error())
 		return
 	}
@@ -905,12 +907,11 @@ func PHONE(ac *atmi.ATMICtx, svc *atmi.TPSVCINFO) {
 	//fmt.Println("Incoming request:")
 	ub.TpLogPrintUBF(atmi.LOG_DEBUG, "Incoming request:")
 
-	/* Echo test... 
-	MVoice = true
-        go GoVoice(MOurNode, MOurNode)
-	return
+	/* Echo test...
+		MVoice = true
+	        go GoVoice(MOurNode, MOurNode)
+		return
 	*/
-
 
 	//Add test field to buffer
 	cmd, errB := ub.BGetByte(u.A_CMD, 0)
