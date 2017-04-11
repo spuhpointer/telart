@@ -23,6 +23,8 @@
 #define CMD_FOUND 	        'F' /* Found target     		*/
 #define CMD_SYSERR 	        'R' /* System error occurred   		*/
 #define CMD_EXIT 	        'X' /* System exit   		        */
+#define CMD_DIAG_RING 	        'D' /* Diagnostic ring 		        */
+#define CMD_DIAG_RINGOFF        'd' /* Diagnostic ring, off		*/
 
 /*---------------------------Enums--------------------------------------*/
 /*---------------------------Typedefs-----------------------------------*/

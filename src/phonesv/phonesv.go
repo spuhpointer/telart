@@ -101,6 +101,9 @@ var Machine = []State{
 			Transition{cmd: t.CMD_PICK_OUR, a: GoFindFreePhone, next_state: SActivFind},
 			/* They send us ring the bell - if idle, accept... */
 			Transition{cmd: t.CMD_RING_BELL, f: SetLockToPartner, next_state: SPasivRing},
+			Transition{cmd: t.CMD_DIAG_RING, a: DiagRingLocal, next_state: SIdle},
+			Transition{cmd: t.CMD_DIAG_RINGOFF, a: DiagRingLocalOff, next_state: SIdle},
+			
 		},
 	},
 	State{
@@ -558,36 +561,41 @@ next:
 		MVoice = false
 	}
 
-	/* Process ring block: */
-	if nextState.ring && !MRing {
-		ac.TpLogWarn("Ring start")
-		MRing = true
-		go GoRing(MTheirNode)
-	} else if !nextState.ring && MRing {
-		ac.TpLogWarn("Ring terminate")
-		MRing = false
-	}
+	/* Execute state processing only if state have changed
+	 * Thus allow diagnostic commands in same state
+	 */
+	if curState.state != nextState.state {
+		/* Process ring block: */
+		if nextState.ring && !MRing {
+			ac.TpLogWarn("Ring start")
+			MRing = true
+			go GoRing(MTheirNode)
+		} else if !nextState.ring && MRing {
+			ac.TpLogWarn("Ring terminate")
+			MRing = false
+		}
 
-	/* Process busy block: */
-	if nextState.playBusy && !MBusy {
-		ac.TpLogWarn("Play Busy start")
-		MBusy = true
-		MWait = false
-		go GoPlayback(MOurNode, t.CMD_SIGNAL_BUSY)
-	} else if !nextState.playBusy && MBusy {
-		ac.TpLogWarn("Play Busy terminate")
-		MBusy = false
-	}
+		/* Process busy block: */
+		if nextState.playBusy && !MBusy {
+			ac.TpLogWarn("Play Busy start")
+			MBusy = true
+			MWait = false
+			go GoPlayback(MOurNode, t.CMD_SIGNAL_BUSY)
+		} else if !nextState.playBusy && MBusy {
+			ac.TpLogWarn("Play Busy terminate")
+			MBusy = false
+		}
 
-	/* Process wait block: */
-	if nextState.playWait && !MWait {
-		ac.TpLogWarn("Play Wait start")
-		MWait = true
-		MBusy = false
-		go GoPlayback(MOurNode, t.CMD_SIGNAL_WAIT)
-	} else if !nextState.playWait && MWait {
-		ac.TpLogWarn("Play Wait terminate")
-		MWait = false
+		/* Process wait block: */
+		if nextState.playWait && !MWait {
+			ac.TpLogWarn("Play Wait start")
+			MWait = true
+			MBusy = false
+			go GoPlayback(MOurNode, t.CMD_SIGNAL_WAIT)
+		} else if !nextState.playWait && MWait {
+			ac.TpLogWarn("Play Wait terminate")
+			MWait = false
+		}
 	}
 
 	/* Set the timeout (if have one) */
@@ -613,6 +621,25 @@ next:
 
 	ac.TpLogInfo("Machine Stepped ok")
 }
+
+func SetAnswerBusy(ac *atmi.ATMICtx) atmi.ATMIError {
+	ac.TpLogInfo("Sending to partner: %d busy signal", MTheirNodeLast)
+	MAnswer = t.CMD_SIGNAL_BUSY
+	return nil
+}
+
+//Start the ring on local node
+func DiagRingLocal(ac *atmi.ATMICtx) atmi.ATMIError {
+	go GoRing(MOurNode);
+	return nil
+}
+
+//Stop ring on local node
+func DiagRingLocalOff(ac *atmi.ATMICtx) atmi.ATMIError {
+	MRing = false
+	return nil
+}
+
 
 //Ring the bell
 //@param
@@ -674,7 +701,7 @@ func GoRing(node int) {
 				errA.Message())
 
 			//Send hup from their side
-			StepStateMachine(ac, t.CMD_HUP_OUR, "GoRing()")
+			StepStateMachine(ac, t.CMD_HUP_THEIR, "GoRing()")
 
 			ret = FAIL
 			return

@@ -23,5 +23,7 @@ const (
 	CMD_SYSERR           = 'R' /* System error occurred            	*/
 	CMD_LOCK             = 'L' /* Locked to this phone...          	*/
 	CMD_EXIT             = 'X' /* System exit          		*/
+	CMD_DIAG_RING	     = 'D' /* Diagnostic ring			*/
+	CMD_DIAG_RINGOFF     = 'd' /* Diagnostic ring, off		*/
 
 )
