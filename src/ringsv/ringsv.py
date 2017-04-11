@@ -10,6 +10,7 @@ import RPi.GPIO as GPIO	 #import the GPIO library
 import time							 #import the time library
 
 RunRing=False
+RingThread=True
 
 class Buzzer(object):
 	def __init__(self):
@@ -71,8 +72,11 @@ def RunBuzzer(threadName):
 	#a = input("Enter Tune number 1-5:")
 	tplog(log_debug, "Into RunBuzzer")
 	buzzer = Buzzer()
-	while RunRing:
-		buzzer.play(int(4))
+	while RingThread:
+		while RunRing:
+			buzzer.play(int(4))
+		# Have some sleep
+		time.sleep(0.1)
 
 class server:
 	def RING(self, arg):
@@ -81,8 +85,7 @@ class server:
 		try:
 			tplog(log_debug, "Starting... RunBuzzer")
 			#thread.start_new_thread( RunBuzzer, ("Thread-1", ) )
-			thread = Thread(target = RunBuzzer, args = (10, ))
-			thread.start()
+			
 		except:
 			log(log_error, "Failed to start Buzzer");
 
@@ -142,8 +145,12 @@ def exithandler():
 sys.exitfunc = exithandler
 
 if __name__ == '__main__': 
-	RunRing=True
+	thread = Thread(target = RunBuzzer, args = (10, ))
+	thread.start()
 	mainloop(sys.argv, srv, None)
+	# Terminate ring thread
+	RingThread=False
+	thread.join()
 
 # Local Variables: 
 # mode:python 
