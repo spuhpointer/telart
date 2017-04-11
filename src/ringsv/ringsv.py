@@ -77,15 +77,17 @@ class server:
 				x=0
 
 				print("Playing tune ",tune)
-				pitches=[1047, 988,659]
-				duration=[0.1,0.1,0.2]
+				pitches=[1047, 988,659, 1,1,1,1,1]
+				duration=[0.1,0.1,0.2,0.1,0.1,0.1,0.1,0.1]
 				for p in pitches:
 					self.buzz(p, duration[x])	#feed the pitch and duration to the func$
 					time.sleep(duration[x] *0.5)
 					try:
-						evt, rec = tprecv(handle,TPNOBLOCK)
-						tplog(log_debug, "Got Tick")
-						lastRcv = time.time()
+						# flush the queues, if have msgs in...
+						while True:
+							evt, rec = tprecv(handle,TPNOBLOCK)
+							tplog(log_debug, "Got Tick")
+							lastRcv = time.time()
 					except RuntimeError, e:
 						exception = "got exception: %s" % e
 						if exception.find("TPMINVAL") == -1:
