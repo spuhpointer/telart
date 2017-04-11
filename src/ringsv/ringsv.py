@@ -2,13 +2,10 @@
 import sys
 import os
 import string
-import thread
-import threading
-from threading import Thread
-from endurox.atmi import *
+import time
 
+from endurox.atmi import *
 import RPi.GPIO as GPIO	 #import the GPIO library
-import time							 #import the time library
 
 #class Buzzer(object):
 class server:
@@ -67,8 +64,12 @@ class server:
 
 
 		try:
-			while 1:
-				evt, rec = tprecv(handle)
+			lastRcv = time.time()
+			# protect us for 5 second non response.
+			while time.time() - lastRcv < 5 :
+				#evt, rec = tprecv(handle)
+
+				#if rec is not None:
 
 				tune=4
 				GPIO.setmode(GPIO.BCM)
@@ -81,6 +82,16 @@ class server:
 				for p in pitches:
 					self.buzz(p, duration[x])	#feed the pitch and duration to the func$
 					time.sleep(duration[x] *0.5)
+					try:
+						evt, rec = tprecv(handle,TPNOBLOCK)
+						tplog(log_debug, "Got Tick")
+						lastRcv = time.time()
+					except RuntimeError, e:
+						exception = "got exception: %s" % e
+						if exception.find("TPMINVAL") == -1:
+							raise
+						
+					
 		except RuntimeError, e:
 			exception = "got exception: %s" % e
 			tplog(log_error, exception)

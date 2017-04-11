@@ -704,7 +704,7 @@ func GoRing(node int) {
 
 		}
 
-		time.Sleep(1000 * time.Millisecond)
+		time.Sleep(200 * time.Millisecond)
 	}
 }
 
