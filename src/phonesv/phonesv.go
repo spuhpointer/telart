@@ -101,7 +101,7 @@ var Machine = []State{
 			Transition{cmd: t.CMD_PICK_OUR, a: GoFindFreePhone, next_state: SActivFind},
 			/* They send us ring the bell - if idle, accept... */
 			Transition{cmd: t.CMD_RING_BELL, f: SetLockToPartner, next_state: SPasivRing},
-			Transition{cmd: t.CMD_DIAG_RING, a: DiagRingLocal, next_state: SIdle},
+			Transition{cmd: t.CMD_DIAG_RING, next_state: SIdle},
 			Transition{cmd: t.CMD_DIAG_RINGOFF, a: DiagRingLocalOff, next_state: SIdle},
 			
 		},
@@ -596,7 +596,12 @@ next:
 			ac.TpLogWarn("Play Wait terminate")
 			MWait = false
 		}
-	}
+	} else {
+                /* diagnostic code */
+                if cmd == t.CMD_DIAG_RING {
+                        go GoRing(MOurNode);
+                }
+        }
 
 	/* Set the timeout (if have one) */
 
@@ -620,18 +625,6 @@ next:
 	}
 
 	ac.TpLogInfo("Machine Stepped ok")
-}
-
-func SetAnswerBusy(ac *atmi.ATMICtx) atmi.ATMIError {
-	ac.TpLogInfo("Sending to partner: %d busy signal", MTheirNodeLast)
-	MAnswer = t.CMD_SIGNAL_BUSY
-	return nil
-}
-
-//Start the ring on local node
-func DiagRingLocal(ac *atmi.ATMICtx) atmi.ATMIError {
-	go GoRing(MOurNode);
-	return nil
 }
 
 //Stop ring on local node
