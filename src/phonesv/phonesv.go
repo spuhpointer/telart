@@ -28,7 +28,8 @@ const (
 	SPasivRing = "PasivRing"    /* We go the ring */
 	SPasivConv = "PasivConv"    /* We go into conversion */
 
-	ConstFindPhoneTime = 10 /* Search for phone 30 sec */
+	ConstFindPhoneTime = 30 /* Search for phone 30 sec */
+        ConstConvTime =  600 /* 10 min */
 )
 
 //Get UTC milliseconds since epoch
@@ -130,7 +131,7 @@ var Machine = []State{
 		},
 	},
 	State{
-		state: SActivConv, voice: true, ring: false, playBusy: false, playWait: false, tout: 600,
+		state: SActivConv, voice: true, ring: false, playBusy: false, playWait: false, tout: ConstConvTime,
 		transitions: []Transition{
 			Transition{cmd: t.CMD_TIMEOUT, a: SendHUP, next_state: SAllBusy},
 			Transition{cmd: t.CMD_HUP_OUR, a: SendHUP, next_state: SIdle},
@@ -159,7 +160,7 @@ var Machine = []State{
 		},
 	},
 	State{
-		state: SPasivConv, voice: true, ring: false, playBusy: false, playWait: false, tout: 600,
+		state: SPasivConv, voice: true, ring: false, playBusy: false, playWait: false, tout: ConstConvTime,
 		transitions: []Transition{
 			Transition{cmd: t.CMD_TIMEOUT, f: SendHUP, next_state: SAllBusy},
 			Transition{cmd: t.CMD_HUP_OUR, f: SendHUP, next_state: SIdle},
