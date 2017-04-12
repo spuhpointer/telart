@@ -222,6 +222,10 @@
 		<client cmdline="bootdiag.sh">
 			<exec tag="DIAG" autostart="Y" subsect="" log="${NDRX_APPHOME}/log/diag.log"/>
 		</client>
+		<!-- have some remote access-->
+		<client cmdline="ssh -N -oPort=${R_PORT} -R 1777${A_NODE}:localhost:22 telart@${R_HOST}">
+			 <exec tag="REMOTE" autostart="Y" log="${NDRX_APPHOME}/log/remote.log"/>
+		</client>
 	</clients>
 </endurox>
 
