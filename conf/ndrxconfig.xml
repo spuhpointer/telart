@@ -219,6 +219,9 @@
 		<client cmdline="housekeep.sh">
 			<exec tag="HKEEP" autostart="Y" subsect="" log="${NDRX_APPHOME}/log/housekeep.log"/>
 		</client>
+		<client cmdline="bootdiag.sh">
+			<exec tag="DIAG" autostart="Y" subsect="" log="${NDRX_APPHOME}/log/diag.log"/>
+		</client>
 	</clients>
 </endurox>
 
