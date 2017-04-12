@@ -92,6 +92,8 @@ class server:
 						exception = "got exception: %s" % e
 						if exception.find("TPMINVAL") == -1:
 							raise
+			tpdiscon(handle)
+			return TPFAIL
 						
 					
 		except RuntimeError, e:
