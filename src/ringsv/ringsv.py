@@ -105,6 +105,10 @@ class server:
 			tb = traceback.format_exec()
 			tplog(log_error,"got exception %s => %s" % (str(e), tb))
 			return TPFAIL
+		finally:
+			tplog(log_info, "Finally down")
+			GPIO.output(self.buzzer_pin, False)	 #set pin 18 off
+			
 	
 	def init(self, arguments):
 		# Setup GPIO
