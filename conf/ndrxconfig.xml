@@ -197,10 +197,17 @@
 		</server>
 		<server name="ringsv.py">
 		        <pingtime>0</pingtime>
-			<min>1</min>
+			<min>0</min>
 			<max>1</max>
 			<srvid>3600</srvid>
 			<sysopt>-e ${NDRX_APPHOME}/log/ringsv.log -r</sysopt>
+		</server>
+		<server name="relring.py">
+		        <pingtime>0</pingtime>
+			<min>1</min>
+			<max>1</max>
+			<srvid>3601</srvid>
+			<sysopt>-e ${NDRX_APPHOME}/log/relring.log -r</sysopt>
 		</server>
 		<server name="cpmsrv">
 			<min>1</min>
