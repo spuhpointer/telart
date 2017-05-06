@@ -36,14 +36,14 @@ class server:
 		try:
 			lastRcv = time.time()
 
-			o=0.01 # contact on seconds
-			w=0.05 # wait seconds (between ticks)
+			o=0.03 # contact on seconds
+			w=0.01 # wait seconds (between ticks)
 			w2=0.1 # Wait at end (sequence 2)
 			# protect us for 5 second non response.
 			while time.time() - lastRcv < 5 :
 
 				tplog(log_debug, "About to run bell sequence")
-				pitches=[-1,0,1,0,-1,0,1,0,-1,0,1,0,-1,0,1,0,-1,0,1,0,-1,0,1,0,-1,0,1,0,-1,0,1,0,-1,0,1,0,-1,0,2,2,2,2,2]
+				pitches=[-1,0,1,0,-1,0,1,0,-1,0,1,0,-1,0,1,0,-1,0,1,0,-1,0,1,0,-1,0,1,0,-1,0,1,0,-1,0,1,0,-1,0,-1,0,1,0,-1,0,1,0,-1,0,1,2,2,2,2,2]
 				for p in pitches:
 
 					if p == -1:
