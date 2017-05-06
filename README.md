@@ -1,6 +1,6 @@
 ## Synopsis
 
-Peer-to-peer, random dialer telephone system realization on [Enduro/X cluster middleware for C/C++/Go/Python](http://www.endurox.org). [Project descritpion can be found here](https://publicwork.wordpress.com/2017/04/08/telephone-system-simulation-with-endurox-middleware/)
+Peer-to-peer, random dialer telephone system realization on [Enduro/X cluster middleware for C/C++/Go/Python](http://www.endurox.org). [Project description can be found here](https://publicwork.wordpress.com/2017/04/08/telephone-system-simulation-with-endurox-middleware/)
 The project uses Enduro/X XATMI distributed processing and clustering to join in single cluster domain all involed nodes (in this
 case Raspberry PI machines). Which offers services like PHONE, RING, PLAYBACK (busy, wait), MIC. The system reads the switch state
 picked up, or hanged up the phone and does the random call to other nodes. If other node picks up the phone
